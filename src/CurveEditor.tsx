@@ -2,11 +2,10 @@ import { For, Show, createMemo, createSignal, mapArray } from 'solid-js'
 import { createStore } from 'solid-js/store'
 
 import { Vector } from './types'
-import { addVectors } from './utils/addVectors'
 import { cubicLookup as createCubicLookupMap } from './utils/cubicLookup'
 import { dragHelper } from './utils/dragHelper'
 import { findYOnLine } from './utils/findYOnLine'
-import { subtractVectors } from './utils/subtractVectors'
+import { vector } from './utils/vector'
 
 export type Points = [
   { position: Vector; handle2: Vector },
@@ -50,112 +49,37 @@ const Handle = (props: {
 
 const Point = (props: {
   point: Points[number]
-  next: Points[number] | undefined
-  prev: Points[number] | undefined
+  onPositionChange: (point: Vector) => void
+  onHandle1Change: (point: Vector) => void
+  onHandle2Change: (point: Vector) => void
 }) => {
-  const [point, setPoint] = createStore(props.point)
-
   const onDrag = (e: MouseEvent) => {
-    const position = { ...point.position }
-    dragHelper(e, (delta) => {
-      setPoint('position', {
-        x: position.x - delta.x,
-        y: position.y - delta.y,
-      })
-    })
-  }
-
-  const onChangeHandle1 = (handle: Vector) => {
-    // if handle is more to the right then the previous point
-    // find the point that is on the intersection of
-    // the y-axis of the previous point and
-    // the line created by the handle and the point
-    if (
-      props.prev &&
-      handle.x + props.point.position.x < props.prev.position.x
-    ) {
-      const y = findYOnLine(
-        props.point.position,
-        addVectors(props.point.position, handle),
-        props.prev.position.x
-      )
-      setPoint(
-        'handle1',
-        subtractVectors({ x: props.prev.position.x, y }, props.point.position)
-      )
-    }
-
-    if (props.point.position.x < handle.x + props.point.position.x) {
-      setPoint('handle1', {
-        x: 0,
-        y: handle.y,
-      })
-      return
-    }
-
-    if (
-      !props.prev ||
-      handle.x + props.point.position.x > props.prev?.position.x
+    const position = { ...props.point.position }
+    dragHelper(e, (delta) =>
+      props.onPositionChange(vector.subtract(position, delta))
     )
-      setPoint('handle1', handle)
-  }
-
-  const onChangeHandle2 = (handle: Vector) => {
-    // if handle is more to the left then the next point
-    // find the point that is on the intersection of
-    // the y-axis of the next point and
-    // the line created by the handle and the point
-    if (
-      props.next &&
-      handle.x + props.point.position.x > props.next.position.x
-    ) {
-      const y = findYOnLine(
-        props.point.position,
-        addVectors(props.point.position, handle),
-        props.next.position.x
-      )
-      setPoint('handle2', {
-        x: props.next.position.x - props.point.position.x,
-        y: y - props.point.position.y,
-      })
-      return
-    }
-
-    if (props.point.position.x > handle.x + props.point.position.x) {
-      setPoint('handle2', {
-        x: 0,
-        y: handle.y,
-      })
-      return
-    }
-
-    if (
-      !props.next ||
-      handle.x + props.point.position.x < props.next?.position.x
-    )
-      setPoint('handle2', handle)
   }
 
   return (
     <>
       <circle
-        cx={point.position.x}
-        cy={point.position.y}
+        cx={props.point.position.x}
+        cy={props.point.position.y}
         r="5"
         onMouseDown={onDrag}
       />
-      <Show when={'handle1' in point && point}>
+      <Show when={'handle1' in props.point && props.point}>
         <Handle
-          position={point.position}
-          handle={point.handle1}
-          onChange={onChangeHandle1}
+          position={props.point.position}
+          handle={props.point.handle1}
+          onChange={props.onHandle1Change}
         />
       </Show>
-      <Show when={'handle2' in point && point}>
+      <Show when={'handle2' in props.point && props.point}>
         <Handle
-          position={point.position}
-          handle={point.handle2}
-          onChange={onChangeHandle2}
+          position={props.point.position}
+          handle={props.point.handle2}
+          onChange={props.onHandle2Change}
         />
       </Show>
     </>
@@ -240,7 +164,7 @@ const XY = (props: {
         y2={findYCoordinateOnBezier()}
         stroke="black"
       />
-      {lookupMap().map((point) => (
+      {/* {lookupMap().map((point) => (
         <circle
           cx={point.x}
           cy={point.y}
@@ -255,13 +179,13 @@ const XY = (props: {
               : 'black'
           }
         />
-      ))}
+      ))} */}
     </>
   )
 }
 
-export const CurveEditor = () => {
-  const [points] = createStore<Points>([
+export const BezierEditor = () => {
+  const [points, setPoints] = createStore<Points>([
     {
       position: { x: 50, y: 50 },
       handle2: { x: 100, y: 0 },
@@ -319,8 +243,111 @@ export const CurveEditor = () => {
         {(point, index) => (
           <Point
             point={point}
-            next={points[index() + 1]}
-            prev={points[index() - 1]}
+            onPositionChange={(position) => {
+              const prev = points[index() - 1].position
+              const next = points[index() + 1].position
+
+              if (prev && position.x - 2 < prev.x) {
+                setPoints(index(), 'position', {
+                  x: prev.x + 2,
+                  y: position.y,
+                })
+                return
+              }
+              if (next && position.x > next.x) {
+                setPoints(index(), 'position', {
+                  x: next.x - 1,
+                  y: position.y,
+                })
+                return
+              }
+
+              if ('handle2' in point) {
+                const delta1 = vector.subtract(next, point.position)
+                const delta2 = vector.subtract(next, position)
+                const ratio = vector.divide(delta1, delta2)
+                setPoints(index(), 'handle2', (handle) =>
+                  vector.divide(handle, ratio)
+                )
+                setPoints(index() + 1, 'handle1', (handle) =>
+                  vector.divide(handle, ratio)
+                )
+              }
+              if ('handle1' in point) {
+                const delta1 = vector.subtract(prev, point.position)
+                const delta2 = vector.subtract(prev, position)
+                const ratio = vector.divide(delta1, delta2)
+                setPoints(index(), 'handle1', (handle) =>
+                  vector.divide(handle, ratio)
+                )
+                setPoints(index() - 1, 'handle2', (handle) =>
+                  vector.divide(handle, ratio)
+                )
+              }
+              setPoints(index(), 'position', position)
+            }}
+            onHandle1Change={(handle) => {
+              const prev = points[index() - 1]
+              // if handle is more to the right then the previous point
+              // find the point that is on the intersection of
+              // the y-axis of the previous point and
+              // the line created by the handle and the point
+              const absoluteHandle = vector.add(point.position, handle)
+              if (prev && absoluteHandle.x < prev.position.x) {
+                const y = findYOnLine(
+                  point.position,
+                  absoluteHandle,
+                  prev.position.x
+                )
+                setPoints(
+                  index(),
+                  'handle1',
+                  vector.subtract({ x: prev.position.x, y }, point.position)
+                )
+              }
+
+              if (point.position.x < handle.x + point.position.x) {
+                setPoints(index(), 'handle1', {
+                  x: 0,
+                  y: handle.y,
+                })
+                return
+              }
+
+              if (!prev || handle.x + point.position.x > prev?.position.x)
+                setPoints(index(), 'handle1', handle)
+            }}
+            onHandle2Change={(handle) => {
+              const next = points[index() + 1]
+
+              // if handle is more to the left then the next point
+              // find the point that is on the intersection of
+              // the y-axis of the next point and
+              // the line created by the handle and the point
+              if (next && handle.x + point.position.x > next.position.x) {
+                const y = findYOnLine(
+                  point.position,
+                  vector.add(point.position, handle),
+                  next.position.x
+                )
+                setPoints(index(), 'handle2', {
+                  x: next.position.x - point.position.x,
+                  y: y - point.position.y,
+                })
+                return
+              }
+
+              if (point.position.x > handle.x + point.position.x) {
+                setPoints(index(), 'handle2', {
+                  x: 0,
+                  y: handle.y,
+                })
+                return
+              }
+
+              if (!next || handle.x + point.position.x < next?.position.x)
+                setPoints(index(), 'handle2', handle)
+            }}
           />
         )}
       </For>
