@@ -1,6 +1,6 @@
 import { Vector } from '../types'
 
-export const cubicLookup = (
+export const createCubicLookupMap = (
   start: { position: Vector; handle2: Vector },
   end: { position: Vector; handle1: Vector },
   amount = 60
@@ -8,11 +8,11 @@ export const cubicLookup = (
   const x0 = start.position.x
   const y0 = start.position.y
 
-  const x1 = start.position.x + start.handle2.x
-  const y1 = start.position.y + start.handle2.y
+  const x1 = start.handle2.x
+  const y1 = start.handle2.y
 
-  const x2 = end.position.x + end.handle1.x
-  const y2 = end.position.y + end.handle1.y
+  const x2 = end.handle1.x
+  const y2 = end.handle1.y
 
   const x3 = end.position.x
   const y3 = end.position.y

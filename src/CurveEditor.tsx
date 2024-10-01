@@ -1,25 +1,27 @@
 import { For, Show, createMemo, createSignal, mapArray } from 'solid-js'
 import { createStore } from 'solid-js/store'
-
 import { Vector } from './types'
-import { cubicLookup as createCubicLookupMap } from './utils/cubicLookup'
+import { createCubicLookupMap } from './utils/cubicLookup'
 import { dragHelper } from './utils/dragHelper'
 import { findYOnLine } from './utils/findYOnLine'
+import { lerp } from './utils/lerp'
 import { vector } from './utils/vector'
 
-export type Points = [
-  { position: Vector; handle2: Vector },
-  ...{ position: Vector; handle2: Vector; handle1: Vector }[],
-  { position: Vector; handle1: Vector }
+type Handle = Vector
+
+type Points = [
+  { position: Vector; handle2: Handle },
+  ...{ position: Vector; handle2: Handle; handle1: Handle }[],
+  { position: Vector; handle1: Handle }
 ]
 
 const Handle = (props: {
   position: Vector
-  handle: Vector
+  absoluteHandle: Vector
   onChange: (position: Vector) => void
 }) => {
   const onDrag = async (e: MouseEvent) => {
-    const handle = { ...props.handle }
+    const handle = { ...props.absoluteHandle }
     dragHelper(e, (delta) =>
       props.onChange({
         x: handle.x - delta.x,
@@ -31,17 +33,19 @@ const Handle = (props: {
   return (
     <>
       <circle
-        cx={props.handle.x + props.position.x}
-        cy={props.handle.y + props.position.y}
+        cx={props.absoluteHandle.x}
+        cy={props.absoluteHandle.y}
         r="5"
         onMouseDown={onDrag}
+        style={{ cursor: 'move' }}
       />
       <line
         stroke="black"
         x1={props.position.x}
         y1={props.position.y}
-        x2={props.handle.x + props.position.x}
-        y2={props.handle.y + props.position.y}
+        x2={props.absoluteHandle.x}
+        y2={props.absoluteHandle.y}
+        style={{ 'pointer-events': 'none' }}
       />
     </>
   )
@@ -67,27 +71,36 @@ const Point = (props: {
         cy={props.point.position.y}
         r="5"
         onMouseDown={onDrag}
+        style={{ cursor: 'move' }}
       />
-      <Show when={'handle1' in props.point && props.point}>
-        <Handle
-          position={props.point.position}
-          handle={props.point.handle1}
-          onChange={props.onHandle1Change}
-        />
+      <Show when={props.point.handle1 && props.point}>
+        {(point) => (
+          <Handle
+            position={point().position}
+            absoluteHandle={point().handle1}
+            onChange={props.onHandle1Change}
+          />
+        )}
       </Show>
-      <Show when={'handle2' in props.point && props.point}>
-        <Handle
-          position={props.point.position}
-          handle={props.point.handle2}
-          onChange={props.onHandle2Change}
-        />
+      <Show when={props.point.handle2 && props.point}>
+        {(point) => (
+          <Handle
+            position={point().position}
+            absoluteHandle={point().handle2}
+            onChange={props.onHandle2Change}
+          />
+        )}
       </Show>
     </>
   )
 }
 
 const XY = (props: {
-  points: Points
+  points: {
+    position: Vector
+    handle1: Vector | undefined
+    handle2: Vector | undefined
+  }[]
   x: number
   onChange: (x: number) => void
 }) => {
@@ -164,53 +177,72 @@ const XY = (props: {
         y2={findYCoordinateOnBezier()}
         stroke="black"
       />
-      {/* {lookupMap().map((point) => (
-        <circle
-          cx={point.x}
-          cy={point.y}
-          r="5"
-          style={{ 'pointer-events': 'none' }}
-          fill={
-            (closestPoint()[0]?.x === point.x &&
-              closestPoint()[0]?.y === point.y) ||
-            (closestPoint()[1]?.x === point.x &&
-              closestPoint()[1]?.y === point.y)
-              ? 'red'
-              : 'black'
-          }
-        />
-      ))} */}
     </>
   )
 }
 
-export const BezierEditor = () => {
+export const CurveEditor = () => {
   const [points, setPoints] = createStore<Points>([
     {
       position: { x: 50, y: 50 },
-      handle2: { x: 100, y: 0 },
+      handle2: { x: 0.5, y: 0 },
     },
     {
-      position: { x: 400, y: 300 },
-      handle1: { x: -150, y: 0 },
-      handle2: { x: 150, y: 0 },
+      position: { x: 400, y: 50 },
+      handle1: { x: 0.5, y: 0 },
+      handle2: { x: 0.5, y: 10 },
     },
     {
-      position: { x: 600, y: 50 },
-      handle1: { x: -150, y: 0 },
+      position: { x: 400 + 350, y: 200 },
+      handle1: { x: 0.5, y: 10 },
     },
   ])
 
   const [x, setX] = createSignal(150)
 
-  const dFromSegments = () => {
+  const absolutePointsSegments = mapArray(
+    () => points,
+    (point, index) =>
+      createMemo(() => {
+        const result = {
+          position: point.position,
+          handle1: undefined as Vector | undefined,
+          handle2: undefined as Vector | undefined,
+        }
+
+        if ('handle1' in point) {
+          const prev = points[index() - 1].position
+          const deltaX = vector.subtract(point.position, prev).x
+
+          result.handle1 = vector.add(point.position, {
+            x: deltaX * point.handle1.x * -1,
+            y: point.handle1.y,
+          })
+        }
+
+        if ('handle2' in point) {
+          const next = points[index() + 1].position
+          const deltaX = vector.subtract(next, point.position).x
+
+          result.handle2 = vector.add(point.position, {
+            x: deltaX * point.handle2.x,
+            y: point.handle2.y,
+          })
+        }
+        return result
+      })
+  )
+
+  const absolutePoints = () => absolutePointsSegments().flatMap((fn) => fn())
+
+  const dFromPoints = () => {
     let d = ''
-    points.forEach((point) => {
+    absolutePoints().forEach((point, index) => {
       let segment = ''
-      if ('handle1' in point) {
-        segment += point.handle1.x + point.position.x
+      if (point.handle1) {
+        segment += point.handle1.x
         segment += ' '
-        segment += point.handle1.y + point.position.y
+        segment += point.handle1.y
         segment += ' '
       }
       if (d === '') {
@@ -225,10 +257,10 @@ export const BezierEditor = () => {
         segment += 'C'
         segment += ' '
       }
-      if ('handle2' in point) {
-        segment += point.handle2.x + point.position.x
+      if (point.handle2) {
+        segment += point.handle2.x
         segment += ' '
-        segment += point.handle2.y + point.position.y
+        segment += point.handle2.y
         segment += ' '
       }
       d += segment
@@ -236,122 +268,123 @@ export const BezierEditor = () => {
     return d
   }
 
+  const onHandleChange = ({
+    absoluteHandle,
+    index,
+    next,
+  }: {
+    absoluteHandle: Vector
+    index: number
+    next: boolean
+  }) => {
+    const point = points[index]
+    const connectedPoint = next ? points[index + 1] : points[index - 1]
+    const handleName = next ? 'handle2' : 'handle1'
+
+    if (
+      (next && connectedPoint.position.x < absoluteHandle.x) ||
+      (!next && connectedPoint.position.x > absoluteHandle.x)
+    ) {
+      absoluteHandle.x = connectedPoint.position.x
+    }
+
+    if (
+      (next && absoluteHandle.x < point.position.x) ||
+      (!next && absoluteHandle.x > point.position.x)
+    ) {
+      absoluteHandle.x = point.position.x
+    }
+
+    const deltaX = Math.abs(point.position.x - connectedPoint.position.x)
+
+    const relativeHandle = {
+      y: absoluteHandle.y - point.position.y,
+      x: Math.abs(point.position.x - absoluteHandle.x) / deltaX,
+    }
+
+    setPoints(index, handleName, relativeHandle)
+  }
+
+  const onPositionChange = (index: number, position: Vector) => {
+    const prev = points[index - 1]
+    const next = points[index + 1]
+    const current = { ...points[index] }
+
+    if (prev && position.x - 10 < prev.position.x) {
+      position.x = prev.position.x + 10
+    }
+    if (next && position.x + 10 > next.position.x) {
+      position.x = next.position.x - 10
+    }
+
+    if (next) {
+      const deltaX = vector.subtract(current.position, position).x
+
+      setPoints(index, 'handle2', (handle) => {
+        const deltaLength = Math.sin(handle.angle) * deltaX
+        return {
+          angle: handle.angle,
+          length: handle.length + deltaLength,
+        }
+      })
+      setPoints(index + 1, 'handle1', (handle) => {
+        const deltaLength = Math.sin(handle.angle) * deltaX
+        return {
+          angle: handle.angle,
+          length: handle.length - deltaLength,
+        }
+      })
+    }
+
+    if (prev) {
+      const oldDelta = vector.subtract(prev.position, current.position)
+      const currentDelta = vector.subtract(prev.position, position)
+      const ratio = vector.divide(oldDelta, currentDelta)
+
+      setPoints(index, 'handle1', (handle) => ({
+        angle: handle.angle,
+        length: lerp(
+          handle.length,
+          handle.length / ratio.x,
+          1 // Math.sin(handle.angle) * -1
+        ),
+      }))
+      setPoints(index - 1, 'handle2', (handle) => ({
+        angle: handle.angle,
+        length: lerp(
+          handle.length,
+          handle.length / ratio.x,
+          1 // Math.sin(handle.angle)
+        ),
+      }))
+    }
+
+    setPoints(index, 'position', position)
+  }
+
   return (
     <svg width={window.innerWidth} height={window.innerHeight}>
-      <path stroke="black" fill="transparent" d={dFromSegments()}></path>
-      <For each={points}>
+      <For each={absolutePoints()}>
         {(point, index) => (
           <Point
             point={point}
-            onPositionChange={(position) => {
-              const prev = points[index() - 1].position
-              const next = points[index() + 1].position
-
-              if (prev && position.x - 2 < prev.x) {
-                setPoints(index(), 'position', {
-                  x: prev.x + 2,
-                  y: position.y,
-                })
-                return
-              }
-              if (next && position.x > next.x) {
-                setPoints(index(), 'position', {
-                  x: next.x - 1,
-                  y: position.y,
-                })
-                return
-              }
-
-              if ('handle2' in point) {
-                const delta1 = vector.subtract(next, point.position)
-                const delta2 = vector.subtract(next, position)
-                const ratio = vector.divide(delta1, delta2)
-                setPoints(index(), 'handle2', (handle) =>
-                  vector.divide(handle, ratio)
-                )
-                setPoints(index() + 1, 'handle1', (handle) =>
-                  vector.divide(handle, ratio)
-                )
-              }
-              if ('handle1' in point) {
-                const delta1 = vector.subtract(prev, point.position)
-                const delta2 = vector.subtract(prev, position)
-                const ratio = vector.divide(delta1, delta2)
-                setPoints(index(), 'handle1', (handle) =>
-                  vector.divide(handle, ratio)
-                )
-                setPoints(index() - 1, 'handle2', (handle) =>
-                  vector.divide(handle, ratio)
-                )
-              }
-              setPoints(index(), 'position', position)
-            }}
-            onHandle1Change={(handle) => {
-              const prev = points[index() - 1]
-              // if handle is more to the right then the previous point
-              // find the point that is on the intersection of
-              // the y-axis of the previous point and
-              // the line created by the handle and the point
-              const absoluteHandle = vector.add(point.position, handle)
-              if (prev && absoluteHandle.x < prev.position.x) {
-                const y = findYOnLine(
-                  point.position,
-                  absoluteHandle,
-                  prev.position.x
-                )
-                setPoints(
-                  index(),
-                  'handle1',
-                  vector.subtract({ x: prev.position.x, y }, point.position)
-                )
-              }
-
-              if (point.position.x < handle.x + point.position.x) {
-                setPoints(index(), 'handle1', {
-                  x: 0,
-                  y: handle.y,
-                })
-                return
-              }
-
-              if (!prev || handle.x + point.position.x > prev?.position.x)
-                setPoints(index(), 'handle1', handle)
-            }}
-            onHandle2Change={(handle) => {
-              const next = points[index() + 1]
-
-              // if handle is more to the left then the next point
-              // find the point that is on the intersection of
-              // the y-axis of the next point and
-              // the line created by the handle and the point
-              if (next && handle.x + point.position.x > next.position.x) {
-                const y = findYOnLine(
-                  point.position,
-                  vector.add(point.position, handle),
-                  next.position.x
-                )
-                setPoints(index(), 'handle2', {
-                  x: next.position.x - point.position.x,
-                  y: y - point.position.y,
-                })
-                return
-              }
-
-              if (point.position.x > handle.x + point.position.x) {
-                setPoints(index(), 'handle2', {
-                  x: 0,
-                  y: handle.y,
-                })
-                return
-              }
-
-              if (!next || handle.x + point.position.x < next?.position.x)
-                setPoints(index(), 'handle2', handle)
-            }}
+            onPositionChange={(position) => onPositionChange(index(), position)}
+            onHandle1Change={(absoluteHandle) =>
+              onHandleChange({ absoluteHandle, index: index(), next: false })
+            }
+            onHandle2Change={(absoluteHandle) =>
+              onHandleChange({ absoluteHandle, index: index(), next: true })
+            }
           />
         )}
       </For>
-      <XY points={points} x={x()} onChange={setX} />
+      <path
+        stroke="black"
+        fill="transparent"
+        d={dFromPoints()}
+        style={{ 'pointer-events': 'none' }}
+      />
+      {/* <XY points={absolutePoints()} x={x()} onChange={setX} /> */}
     </svg>
   )
 }
