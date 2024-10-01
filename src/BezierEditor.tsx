@@ -181,7 +181,7 @@ const XY = (props: {
   )
 }
 
-export const CurveEditor = () => {
+export const BezierEditor = () => {
   const [points, setPoints] = createStore<Points>([
     {
       position: { x: 50, y: 50 },
@@ -384,7 +384,7 @@ export const CurveEditor = () => {
         d={dFromPoints()}
         style={{ 'pointer-events': 'none' }}
       />
-      {/* <XY points={absolutePoints()} x={x()} onChange={setX} /> */}
+      <XY points={absolutePoints()} x={x()} onChange={setX} />
     </svg>
   )
 }

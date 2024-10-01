@@ -1,7 +1,7 @@
-import { CurveEditor } from './CurveEditor'
+import { BezierEditor } from './BezierEditor'
 
 function App() {
-  return <CurveEditor />
+  return <BezierEditor />
 }
 
 export default App
