@@ -7,7 +7,7 @@ type Vector = { x: number; y: number }
  * @param callback called every onMouseMove
  * @returns Promise resolved onMouseUp
  */
-export const dragHelper = (
+export const pointerHelper = (
   e: MouseEvent,
   callback?: (delta: Vector, e: MouseEvent, time: number) => void
 ) => {
@@ -19,7 +19,7 @@ export const dragHelper = (
       }
       const startTime = performance.now()
 
-      const onMouseMove = (e: MouseEvent) => {
+      const onPointerMove = (e: MouseEvent) => {
         callback?.(
           {
             x: start.x - e.clientX,
@@ -29,9 +29,9 @@ export const dragHelper = (
           performance.now() - startTime
         )
       }
-      const onMouseUp = (e: MouseEvent) => {
-        window.removeEventListener('mousemove', onMouseMove)
-        window.removeEventListener('mouseup', onMouseUp)
+      const onPointerUp = (e: MouseEvent) => {
+        window.removeEventListener('pointermove', onPointerMove)
+        window.removeEventListener('pointerup', onPointerUp)
         const delta = {
           x: start.x - e.clientX,
           y: start.y - e.clientY,
@@ -40,8 +40,8 @@ export const dragHelper = (
         resolve({ delta, event: e, time: performance.now() - startTime })
       }
 
-      window.addEventListener('mousemove', onMouseMove)
-      window.addEventListener('mouseup', onMouseUp)
+      window.addEventListener('pointermove', onPointerMove)
+      window.addEventListener('pointerup', onPointerUp)
     }
   )
 }
