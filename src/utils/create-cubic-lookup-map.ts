@@ -9,7 +9,7 @@ import {
 const isPrePoint = (point: Point): point is PrePoint => !!point[1]?.pre
 const isPostPoint = (point: Point): point is PostPoint => !!point[1]?.post
 
-export function createLookupMap(start: Point, end: Point, amount = 60) {
+export function createLookupMap(start: Point, end: Point, amount = 30) {
   if (isPostPoint(start) && isPrePoint(end)) {
     return createCubicLookupMap(start, end, amount)
   } else if (!isPostPoint(start) && !isPrePoint(end)) {

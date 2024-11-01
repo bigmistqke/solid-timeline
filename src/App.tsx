@@ -6,12 +6,7 @@ function CustomTimeline(props: { time: number; onTimeChange: Setter<number> }) {
   const Timeline = createTimeline({
     initialPoints: [
       [{ x: 50, y: -100 }],
-      [
-        { x: 400, y: 100 },
-        {
-          post: { x: 0.5, y: 0 },
-        },
-      ],
+      [{ x: 400, y: 100 }],
       [
         { x: 400 + 350, y: 0 },
         {
@@ -68,6 +63,13 @@ function CustomTimeline(props: { time: number; onTimeChange: Setter<number> }) {
 
 function App() {
   const [time, setTime] = createSignal(100)
+
+  const loop = () => {
+    requestAnimationFrame(loop)
+
+    setTime((performance.now() / 100) % 1000)
+  }
+  loop()
 
   return (
     <>

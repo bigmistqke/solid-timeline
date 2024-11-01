@@ -1,5 +1,7 @@
 import {
+  Accessor,
   ComponentProps,
+  createContext,
   createEffect,
   createMemo,
   createSignal,
@@ -7,28 +9,36 @@ import {
   onCleanup,
   Show,
   splitProps,
+  useContext,
 } from 'solid-js'
-import { createStore } from 'solid-js/store'
+import { createStore, SetStoreFunction } from 'solid-js/store'
 import type { Point, Points, Vector } from './types'
+import { when } from './utils/conditionals'
 import { createLookupMap } from './utils/create-cubic-lookup-map'
-import { findYOnLine } from './utils/find-y-on-line'
 import { indexComputed } from './utils/index-computed'
+import { interpolateYAtX } from './utils/interpolate-y-at-x'
 import { pointerHelper } from './utils/pointer-helper'
 import { vector } from './utils/vector'
 
-const Handle = (props: {
+/**********************************************************************************/
+/*                                                                                */
+/*                                      Anchor                                    */
+/*                                                                                */
+/**********************************************************************************/
+
+const Anchor = (props: {
   position: Vector
-  absoluteHandle: Vector
+  control: Vector
   onChange: (position: Vector) => void
-  zoom: Vector
-  origin: Vector
 }) => {
+  const { project, zoom, clamp } = useTimeline()
+
   async function onPointerDown(e: MouseEvent) {
-    const handle = { ...props.absoluteHandle }
+    const control = props.control
     pointerHelper(e, (delta) =>
       props.onChange({
-        x: handle.x - delta.x / props.zoom.x,
-        y: handle.y - delta.y / props.zoom.y,
+        x: control.x - delta.x / zoom().x,
+        y: clamp(control.y - delta.y / zoom().y),
       })
     )
   }
@@ -36,76 +46,284 @@ const Handle = (props: {
   return (
     <>
       <circle
-        cx={(props.absoluteHandle.x + props.origin.x) * props.zoom.x}
-        cy={(props.absoluteHandle.y + props.origin.y) * props.zoom.y}
+        cx={project(props.control, 'x')}
+        cy={project(props.control, 'y')}
         r="5"
         onPointerDown={onPointerDown}
         style={{ cursor: 'move' }}
       />
       <line
         stroke="black"
-        x1={(props.position.x + props.origin.x) * props.zoom.x}
-        y1={(props.position.y + props.origin.y) * props.zoom.y}
-        x2={(props.absoluteHandle.x + props.origin.x) * props.zoom.x}
-        y2={(props.absoluteHandle.y + props.origin.y) * props.zoom.y}
+        x1={project(props.position, 'x')}
+        y1={project(props.position, 'y')}
+        x2={project(props.control, 'x')}
+        y2={project(props.control, 'y')}
         style={{ 'pointer-events': 'none' }}
       />
     </>
   )
 }
 
+/**********************************************************************************/
+/*                                                                                */
+/*                                      Point                                     */
+/*                                                                                */
+/**********************************************************************************/
+
 function Point(props: {
   position: Vector
-  zoom: Vector
-  origin: Vector
   pre?: Vector
   post?: Vector
   onPositionChange: (point: Vector) => void
   onPreChange: (point: Vector) => void
   onPostChange: (point: Vector) => void
 }) {
+  const { project, zoom, clamp } = useTimeline()
+
   function onDrag(e: MouseEvent) {
     const position = { ...props.position }
-    pointerHelper(e, (delta) =>
-      props.onPositionChange(
-        vector.subtract(position, {
-          x: delta.x / props.zoom.x,
-          y: delta.y / props.zoom.y,
-        })
-      )
-    )
+    pointerHelper(e, (delta) => {
+      const newPosition = vector.subtract(position, {
+        x: delta.x / zoom().x,
+        y: delta.y / zoom().y,
+      })
+      props.onPositionChange({
+        ...newPosition,
+        y: clamp(newPosition.y),
+      })
+    })
   }
 
   return (
     <>
       <circle
-        cx={(props.position.x + props.origin.x) * props.zoom.x}
-        cy={(props.position.y + props.origin.y) * props.zoom.y}
+        cx={project(props.position, 'x')}
+        cy={project(props.position, 'y')}
         r="5"
         onMouseDown={onDrag}
         style={{ cursor: 'move' }}
       />
       <Show when={props.pre}>
-        <Handle
+        <Anchor
           position={props.position}
-          absoluteHandle={props.pre!}
+          control={props.pre!}
           onChange={props.onPreChange}
-          origin={props.origin}
-          zoom={props.zoom}
         />
       </Show>
       <Show when={props.post}>
-        <Handle
+        <Anchor
           position={props.position}
-          absoluteHandle={props.post!}
+          control={props.post!}
           onChange={props.onPostChange}
-          origin={props.origin}
-          zoom={props.zoom}
         />
       </Show>
     </>
   )
 }
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                    Timeline                                    */
+/*                                                                                */
+/**********************************************************************************/
+
+const TimelineContext = createContext<{
+  origin: Accessor<Vector>
+  zoom: Accessor<Vector>
+  project(point: Vector | number, type: 'x' | 'y'): number
+  unproject(point: Vector | number, type: 'x' | 'y'): number
+  clamp(y: number): number
+}>()
+
+function useTimeline() {
+  const context = useContext(TimelineContext)
+  if (!context) {
+    throw `useTimeline should be used in a descendant of Timeline`
+  }
+  return context
+}
+
+function Timeline(
+  props: ComponentProps<'svg'> & {
+    min: number
+    max: number
+    zoom?: Partial<Vector>
+    onZoomChange?: (zoom: Vector) => void
+    onOriginChange?: (origin: Vector) => void
+    absoluteAnchors: Array<Point>
+    onAnchorChange: SetStoreFunction<Array<Point>>
+    d: (config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }) => string
+  }
+) {
+  const [, rest] = splitProps(props, [
+    'min',
+    'max',
+    'onZoomChange',
+    'onOriginChange',
+  ])
+  const [domRect, setDomRect] = createSignal<DOMRect>()
+
+  const yPose = createMemo(
+    when(domRect, (domRect) => {
+      const rangeHeight = props.max - props.min
+      return {
+        zoom: domRect.height / rangeHeight,
+        origin: rangeHeight / 2,
+      }
+    })
+  )
+
+  const zoom = createMemo(() => ({
+    x: 1,
+    y: (yPose()?.zoom || 1) * (props.zoom?.y || 1),
+  }))
+
+  const origin = createMemo(() => ({
+    x: 0,
+    y: (yPose()?.origin || 0) / (props.zoom?.y || 1),
+  }))
+
+  function project(point: Vector | number, type: 'x' | 'y') {
+    const value = typeof point === 'object' ? point[type] : point
+    return (value + origin()[type]) * zoom()[type]
+  }
+
+  function unproject(point: Vector | number, type: 'x' | 'y') {
+    const value = typeof point === 'object' ? point[type] : point
+    return (value - origin()[type]) / zoom()[type]
+  }
+
+  function clamp(y: number) {
+    const userZoomY = props.zoom?.y || 1
+    return Math.max(props.min / userZoomY, Math.min(props.max / userZoomY, y))
+  }
+
+  function onAnchorChange({
+    absoluteAnchor,
+    index,
+    type,
+  }: {
+    absoluteAnchor: Vector
+    index: number
+    type: 'pre' | 'post'
+  }) {
+    const [point] = props.absoluteAnchors[index]
+    const [connectedPoint] =
+      type === 'post'
+        ? props.absoluteAnchors[index + 1]
+        : props.absoluteAnchors[index - 1]
+
+    let absoluteX = unproject(absoluteAnchor, 'x')
+
+    // Clamp anchor w the connected point
+    if (
+      (type === 'post' && connectedPoint.x < absoluteX) ||
+      (type !== 'post' && connectedPoint.x > absoluteX)
+    ) {
+      absoluteX = connectedPoint.x
+    }
+
+    // Clamp anchor w the current point
+    if (
+      (type === 'post' && absoluteX < point.x) ||
+      (type !== 'post' && absoluteX > point.x)
+    ) {
+      absoluteX = point.x
+    }
+
+    const deltaX = Math.abs(point.x - connectedPoint.x)
+
+    const anchor = {
+      y: absoluteAnchor.y - point.y,
+      x: Math.abs(point.x - absoluteX) / deltaX,
+    }
+
+    props.onAnchorChange(index, 1, type, anchor)
+  }
+
+  const onPositionChange = (index: number, position: Vector) => {
+    const [prev] = props.absoluteAnchors[index - 1] || []
+    const [next] = props.absoluteAnchors[index + 1] || []
+
+    // Clamp position w the previous anchor
+    if (prev && position.x - 1 < prev.x) {
+      position.x = prev.x + 1
+    }
+    // Clamp position w the next anchor
+    if (next && position.x + 1 > next.x) {
+      position.x = next.x - 1
+    }
+
+    props.onAnchorChange(index, 0, position)
+  }
+
+  function onRef(element: SVGSVGElement) {
+    function updateDomRect() {
+      setDomRect(element.getBoundingClientRect())
+    }
+    const observer = new ResizeObserver(updateDomRect)
+    observer.observe(element)
+    updateDomRect()
+    onCleanup(() => observer.disconnect())
+  }
+
+  createEffect(() => props.onZoomChange?.(zoom()))
+  createEffect(() => props.onOriginChange?.(origin()))
+
+  return (
+    <TimelineContext.Provider
+      value={{
+        origin,
+        zoom,
+        project,
+        unproject,
+        clamp,
+      }}
+    >
+      <svg ref={onRef} width="100%" height="100%" {...rest}>
+        <For each={props.absoluteAnchors}>
+          {([point, { pre, post } = {}], index) => (
+            <Point
+              position={point}
+              pre={pre}
+              post={post}
+              onPositionChange={(position) =>
+                onPositionChange(index(), position)
+              }
+              onPreChange={(absoluteHandle) =>
+                onAnchorChange({
+                  absoluteAnchor: absoluteHandle,
+                  index: index(),
+                  type: 'pre',
+                })
+              }
+              onPostChange={(absoluteHandle) =>
+                onAnchorChange({
+                  absoluteAnchor: absoluteHandle,
+                  index: index(),
+                  type: 'post',
+                })
+              }
+            />
+          )}
+        </For>
+        <path
+          stroke="black"
+          fill="transparent"
+          d={props.d({ zoom: zoom(), origin: origin() })}
+          style={{ 'pointer-events': 'none' }}
+        />
+        {props.children}
+      </svg>
+    </TimelineContext.Provider>
+  )
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                 Create Timeline                                */
+/*                                                                                */
+/**********************************************************************************/
 
 export function createTimeline(config?: { initialPoints?: Points }) {
   const [anchors, setAnchors] = createStore<Points>(config?.initialPoints || [])
@@ -140,7 +358,7 @@ export function createTimeline(config?: { initialPoints?: Points }) {
         })
       }
 
-      return [point, controls] as const
+      return [point, controls] as Point
     }
   )
 
@@ -151,6 +369,7 @@ export function createTimeline(config?: { initialPoints?: Points }) {
   )
   const lookupMap = createMemo(() => lookupMapSegments().flat())
 
+  // TODO: there must be a faster way of doing these lookups
   function closestPoint(time: number) {
     let closestPointLeft = undefined
     let closestPointRight = undefined
@@ -212,13 +431,14 @@ export function createTimeline(config?: { initialPoints?: Points }) {
 
       if (index !== array.length - 1) {
         let command =
-          !next![1].pre && !post ? 'L' : next![1].pre && post ? 'C' : 'Q'
+          !next![1]?.pre && !post ? 'L' : next![1]?.pre && post ? 'C' : 'Q'
 
         if (command !== currentCommand) {
           currentCommand = command
           segment += currentCommand
           segment += ' '
         }
+
         if (post) {
           segment += (post.x + origin.x) * zoom.x
           segment += ' '
@@ -234,13 +454,13 @@ export function createTimeline(config?: { initialPoints?: Points }) {
   }
 
   function getValue(time: number) {
-    const [closestPointLeft, closestPointRight] = closestPoint(time)
+    const [left, right] = closestPoint(time)
 
-    if (!closestPointLeft && closestPointRight) return closestPointRight.y
-    if (!closestPointRight && closestPointLeft) return closestPointLeft.y
-    if (!closestPointLeft || !closestPointRight) return undefined
+    if (!left && right) return right.y
+    if (!right && left) return left.y
+    if (!left || !right) return undefined
 
-    return findYOnLine(closestPointLeft, closestPointRight, time)
+    return interpolateYAtX(left, right, time)
   }
 
   return {
@@ -250,158 +470,17 @@ export function createTimeline(config?: { initialPoints?: Points }) {
     getValue,
     setAnchors,
     Component: (
-      props: ComponentProps<'svg'> & {
-        min: number
-        max: number
-        zoom?: Partial<Vector>
-        onZoomChange?: (zoom: Vector) => void
-        onOriginChange?: (origin: Vector) => void
-      }
-    ) => {
-      const [, rest] = splitProps(props, [
-        'min',
-        'max',
-        'onZoomChange',
-        'onOriginChange',
-      ])
-      const [domRect, setDomRect] = createSignal<DOMRect>()
-
-      const y = createMemo(() => {
-        const _domRect = domRect()
-
-        if (!_domRect) {
-          return
-        }
-
-        const { height } = _domRect
-
-        const rangeHeight = props.max - props.min
-
-        return {
-          zoom: height / rangeHeight,
-          origin: rangeHeight / 2,
-        }
-      })
-
-      const zoom = () => ({
-        x: 1,
-        y: (y()?.zoom || 1) * (props.zoom?.y || 1),
-      })
-
-      const origin = () => ({
-        x: 0,
-        y: (y()?.origin || 0) / (props.zoom?.y || 1),
-      })
-
-      createEffect(() => props.onZoomChange?.(zoom()))
-      createEffect(() => props.onOriginChange?.(origin()))
-
-      function onAnchorChange({
-        absoluteAnchor,
-        index,
-        type,
-      }: {
-        absoluteAnchor: Vector
-        index: number
-        type: 'pre' | 'post'
-      }) {
-        const [point] = absoluteAnchors()[index]
-        const [connectedPoint] =
-          type === 'post'
-            ? absoluteAnchors()[index + 1]
-            : absoluteAnchors()[index - 1]
-
-        let absoluteX = (absoluteAnchor.x + origin().x) * zoom().x
-
-        if (
-          (type === 'post' &&
-            (connectedPoint.x + origin().x) * zoom().x < absoluteX) ||
-          (type !== 'post' &&
-            (connectedPoint.x + origin().x) * zoom().x > absoluteX)
-        ) {
-          absoluteX = connectedPoint.x
-        }
-
-        if (
-          (type === 'post' && absoluteX < (point.x + origin().x) * zoom().x) ||
-          (type !== 'post' && absoluteX > (point.x + origin().x) * zoom().x)
-        ) {
-          absoluteX = point.x
-        }
-
-        const deltaX = Math.abs(point.x - connectedPoint.x)
-
-        const anchor = {
-          y: absoluteAnchor.y - point.y,
-          x: Math.abs(point.x - absoluteX) / deltaX,
-        }
-
-        setAnchors(index, 1, type, anchor)
-      }
-
-      const onPositionChange = (index: number, position: Vector) => {
-        const [prev] = absoluteAnchors()[index - 1] || []
-        const [next] = absoluteAnchors()[index + 1] || []
-
-        if (prev && position.x - 10 < prev.x) {
-          position.x = prev.x + 10
-        }
-        if (next && position.x + 10 > next.x) {
-          position.x = next.x - 10
-        }
-
-        setAnchors(index, 0, position)
-      }
-
-      function onRef(element: SVGSVGElement) {
-        function updateDomRect() {
-          setDomRect(element.getBoundingClientRect())
-        }
-        const observer = new ResizeObserver(updateDomRect)
-        observer.observe(element)
-        updateDomRect()
-        onCleanup(() => observer.disconnect())
-      }
-
-      return (
-        <svg ref={onRef} width="100%" height="100%" {...rest}>
-          <For each={absoluteAnchors()}>
-            {([point, { pre, post }], index) => (
-              <Point
-                position={point}
-                pre={pre}
-                post={post}
-                origin={origin()}
-                zoom={zoom()}
-                onPositionChange={(position) =>
-                  onPositionChange(index(), position)
-                }
-                onPreChange={(absoluteHandle) =>
-                  onAnchorChange({
-                    absoluteAnchor: absoluteHandle,
-                    index: index(),
-                    type: 'pre',
-                  })
-                }
-                onPostChange={(absoluteHandle) =>
-                  onAnchorChange({
-                    absoluteAnchor: absoluteHandle,
-                    index: index(),
-                    type: 'post',
-                  })
-                }
-              />
-            )}
-          </For>
-          <path
-            stroke="black"
-            fill="transparent"
-            d={d({ zoom: zoom(), origin: origin() })}
-            style={{ 'pointer-events': 'none' }}
-          />
-          {props.children}
-        </svg>
-      )
-    },
+      props: Omit<
+        ComponentProps<typeof Timeline>,
+        'onAnchorChange' | 'absoluteAnchors' | 'd'
+      >
+    ) => (
+      <Timeline
+        onAnchorChange={setAnchors}
+        absoluteAnchors={absoluteAnchors()}
+        d={d}
+        {...props}
+      />
+    ),
   }
 }
