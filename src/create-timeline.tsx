@@ -15,6 +15,7 @@ import { createStore, SetStoreFunction } from 'solid-js/store'
 import type { Point, Points, Vector } from './types'
 import { when } from './utils/conditionals'
 import { createLookupMap } from './utils/create-cubic-lookup-map'
+import { getLastArrayItem } from './utils/get-last-array-item'
 import { indexComputed } from './utils/index-computed'
 import { interpolateYAtX } from './utils/interpolate-y-at-x'
 import { pointerHelper } from './utils/pointer-helper'
@@ -160,6 +161,9 @@ function Timeline(
     'max',
     'onZoomChange',
     'onOriginChange',
+    'absoluteAnchors',
+    'd',
+    'zoom',
   ])
   const [domRect, setDomRect] = createSignal<DOMRect>()
 
@@ -362,34 +366,60 @@ export function createTimeline(config?: { initialPoints?: Points }) {
     }
   )
 
-  const lookupMapSegments = indexComputed(absoluteAnchors, (point, index) =>
-    index < absoluteAnchors().length - 1
-      ? createLookupMap(point, absoluteAnchors()[index + 1], 120)
-      : []
+  const _lookupMapSegments = indexComputed(absoluteAnchors, (point, index) => {
+    const next = absoluteAnchors()[index + 1]
+    return next
+      ? {
+          range: [point[0].x, next[0].x],
+          map: createLookupMap(point, next),
+        }
+      : undefined
+  })
+  const lookupMapSegments = createMemo(() =>
+    _lookupMapSegments().filter((v) => v !== undefined)
   )
-  const lookupMap = createMemo(() => lookupMapSegments().flat())
 
-  // TODO: there must be a faster way of doing these lookups
   function closestPoint(time: number) {
-    let closestPointLeft = undefined
-    let closestPointRight = undefined
+    if (lookupMapSegments().length === 0) {
+      return
+    }
 
-    for (const point of lookupMap()) {
-      const delta = Math.abs(time - point.x)
-      if (time < point.x) {
-        if (!closestPointLeft || delta < Math.abs(time - closestPointLeft.x)) {
-          closestPointLeft = point
-        }
-      } else {
-        if (
-          !closestPointRight ||
-          delta < Math.abs(time - closestPointRight.x)
-        ) {
-          closestPointRight = point
-        }
+    const min = lookupMapSegments()[0]
+    const max = getLastArrayItem(lookupMapSegments())
+
+    if (time < min.range[0]) {
+      return [min.map[0], null]
+    }
+
+    if (time > max.range[1]) {
+      return [null, getLastArrayItem(max.map)]
+    }
+
+    // NOTE:  this is not the fastest way of doing these lookups
+    //        maybe we can investigate another method (binary search p.ex)
+    const segment = lookupMapSegments().find((segment) => {
+      return segment.range[0] < time && time < segment.range[1]
+    })
+
+    if (!segment) {
+      console.error('This should not happen')
+      return [null, null]
+    }
+
+    // NOTE:  this is not the fastest way of doing these lookups
+    //        maybe we can investigate another method (binary search p.ex)
+    for (let i = 0; i < segment.map.length; i++) {
+      const current = segment.map[i]
+      const next = segment.map[i + 1]
+
+      if (!next) continue
+
+      if (current.x < time && time < next.x) {
+        return [current, next]
       }
     }
-    return [closestPointLeft, closestPointRight] as const
+
+    return [null, null]
   }
 
   function d(config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }) {
