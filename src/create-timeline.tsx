@@ -9,8 +9,8 @@ import {
   splitProps,
 } from 'solid-js'
 import { createStore } from 'solid-js/store'
-import type { Point, Points, PostPoint, PrePoint, Vector } from './types'
-import { createCubicLookupMap } from './utils/create-cubic-lookup-map'
+import type { Point, Points, Vector } from './types'
+import { createLookupMap } from './utils/create-cubic-lookup-map'
 import { findYOnLine } from './utils/find-y-on-line'
 import { indexComputed } from './utils/index-computed'
 import { pointerHelper } from './utils/pointer-helper'
@@ -146,11 +146,7 @@ export function createTimeline(config?: { initialPoints?: Points }) {
 
   const lookupMapSegments = indexComputed(absoluteAnchors, (point, index) =>
     index < absoluteAnchors().length - 1
-      ? createCubicLookupMap(
-          point as unknown as PostPoint,
-          absoluteAnchors()[index + 1] as unknown as PrePoint,
-          120
-        )
+      ? createLookupMap(point, absoluteAnchors()[index + 1], 120)
       : []
   )
   const lookupMap = createMemo(() => lookupMapSegments().flat())
@@ -192,7 +188,11 @@ export function createTimeline(config?: { initialPoints?: Points }) {
       ...config?.origin,
     }
 
-    absoluteAnchors().forEach(([point, { pre, post } = {}]) => {
+    let currentCommand = ''
+
+    absoluteAnchors().forEach(([point, { pre, post } = {}], index, array) => {
+      let next = array[index + 1]
+
       let segment = ''
       if (pre) {
         segment += (pre.x + origin.x) * zoom.x
@@ -201,23 +201,32 @@ export function createTimeline(config?: { initialPoints?: Points }) {
         segment += ' '
       }
       if (d === '') {
-        segment += 'M'
+        currentCommand = 'M'
+        segment += currentCommand
         segment += ' '
       }
       segment += (point.x + origin.x) * zoom.x
       segment += ' '
       segment += (point.y + origin.y) * zoom.y
       segment += ' '
-      if (d === '') {
-        segment += 'C'
-        segment += ' '
+
+      if (index !== array.length - 1) {
+        let command =
+          !next![1].pre && !post ? 'L' : next![1].pre && post ? 'C' : 'Q'
+
+        if (command !== currentCommand) {
+          currentCommand = command
+          segment += currentCommand
+          segment += ' '
+        }
+        if (post) {
+          segment += (post.x + origin.x) * zoom.x
+          segment += ' '
+          segment += (post.y + origin.y) * zoom.y
+          segment += ' '
+        }
       }
-      if (post) {
-        segment += (post.x + origin.x) * zoom.x
-        segment += ' '
-        segment += (post.y + origin.y) * zoom.y
-        segment += ' '
-      }
+
       d += segment
     })
 

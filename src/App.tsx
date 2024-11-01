@@ -5,16 +5,10 @@ import { pointerHelper } from './utils/pointer-helper'
 function CustomTimeline(props: { time: number; onTimeChange: Setter<number> }) {
   const Timeline = createTimeline({
     initialPoints: [
-      [
-        { x: 50, y: -100 },
-        {
-          post: { x: 0.5, y: 0 },
-        },
-      ],
+      [{ x: 50, y: -100 }],
       [
         { x: 400, y: 100 },
         {
-          pre: { x: 0.5, y: 0 },
           post: { x: 0.5, y: 0 },
         },
       ],
