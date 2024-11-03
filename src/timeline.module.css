@@ -1,0 +1,5 @@
+.handleContainer:hover .handle,
+.handleContainer.active .handle {
+  fill: white;
+  stroke: black;
+}

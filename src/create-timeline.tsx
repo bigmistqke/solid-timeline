@@ -1,3 +1,4 @@
+import clsx from 'clsx'
 import {
   Accessor,
   ComponentProps,
@@ -13,6 +14,7 @@ import {
   useContext,
 } from 'solid-js'
 import { createStore, SetStoreFunction } from 'solid-js/store'
+import styles from './timeline.module.css'
 import type { Anchor, Anchors, Vector } from './types'
 import { createLookupMap } from './utils/create-cubic-lookup-map'
 import { getLastArrayItem } from './utils/get-last-array-item'
@@ -34,9 +36,11 @@ const Anchor = (props: {
   onChange: (position: Vector) => void
   onChangeEnd: () => void
 }) => {
+  const [dragging, setDragging] = createSignal(false)
   const { project, zoom } = useTimeline()
 
   async function onPointerDown(e: MouseEvent) {
+    setDragging(true)
     const control = props.control
     await pointerHelper(e, (delta) =>
       props.onChange({
@@ -45,19 +49,11 @@ const Anchor = (props: {
       })
     )
     props.onChangeEnd()
+    setDragging(false)
   }
 
   return (
     <>
-      <circle
-        cx={project(props.control, 'x')}
-        cy={project(props.control, 'y')}
-        r="5"
-        onPointerDown={onPointerDown}
-        fill="transparent"
-        stroke="black"
-        style={{ cursor: 'move' }}
-      />
       <line
         stroke="black"
         x1={project(props.position, 'x')}
@@ -66,6 +62,24 @@ const Anchor = (props: {
         y2={project(props.control, 'y')}
         style={{ 'pointer-events': 'none' }}
       />
+      <g class={clsx(styles.handleContainer, dragging() && styles.active)}>
+        <circle
+          cx={project(props.control, 'x')}
+          cy={project(props.control, 'y')}
+          r="10"
+          onPointerDown={onPointerDown}
+          fill="transparent"
+          style={{ cursor: 'move' }}
+        />
+        <circle
+          class={styles.handle}
+          cx={project(props.control, 'x')}
+          cy={project(props.control, 'y')}
+          r="3"
+          fill="black"
+          style={{ 'pointer-events': 'none' }}
+        />
+      </g>
     </>
   )
 }
@@ -158,9 +172,12 @@ function Timeline(
     zoom?: Partial<Vector>
     onZoomChange?: (zoom: Vector) => void
     onOriginChange?: (origin: Vector) => void
+    onTimeChange?: (time: number) => void
     absoluteAnchors: Array<Anchor>
     onAnchorChange: SetStoreFunction<Array<Anchor>>
     d: (config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }) => string
+    getValue: (time: number) => number
+    time?: number
   }
 ) {
   const [, rest] = splitProps(props, [
@@ -289,6 +306,11 @@ function Timeline(
     setPaddingMax(max)
   }
 
+  function onDrag(e: MouseEvent) {
+    const time = props.time!
+    pointerHelper(e, (delta) => props.onTimeChange?.(time - delta.x))
+  }
+
   function onRef(element: SVGSVGElement) {
     function updateDomRect() {
       setDomRect(element.getBoundingClientRect())
@@ -314,6 +336,28 @@ function Timeline(
       }}
     >
       <svg ref={onRef} width="100%" height="100%" {...rest}>
+        <Show when={props.time}>
+          {(time) => (
+            <>
+              <line
+                x1={time()}
+                x2={time()}
+                y1={0}
+                y2={window.innerHeight}
+                onPointerDown={onDrag}
+                stroke="black"
+                style={{
+                  cursor: 'ew-resize',
+                }}
+              />
+              <circle
+                cx={time()}
+                cy={project(props.getValue(time()), 'y')!}
+                r={3}
+              />
+            </>
+          )}
+        </Show>
         <For each={props.absoluteAnchors}>
           {([point, { pre, post } = {}], index) => (
             <Point
@@ -377,10 +421,8 @@ function Timeline(
 /*                                                                                */
 /**********************************************************************************/
 
-export function createTimeline(config?: { initialPoints?: Anchors }) {
-  const [anchors, setAnchors] = createStore<Anchors>(
-    config?.initialPoints || []
-  )
+export function createTimeline(config?: { initial?: Anchors }) {
+  const [anchors, setAnchors] = createStore<Anchors>(config?.initial || [])
 
   const absoluteAnchors = indexComputed(
     () => anchors,
@@ -540,7 +582,7 @@ export function createTimeline(config?: { initialPoints?: Anchors }) {
 
     if (!left && right) return right.y
     if (!right && left) return left.y
-    if (!left || !right) return undefined
+    if (!left || !right) return 0
 
     return interpolateYAtX(left, right, time)
   }
@@ -554,12 +596,13 @@ export function createTimeline(config?: { initialPoints?: Anchors }) {
     Component: (
       props: Omit<
         ComponentProps<typeof Timeline>,
-        'onAnchorChange' | 'absoluteAnchors' | 'd'
+        'onAnchorChange' | 'absoluteAnchors' | 'd' | 'getValue'
       >
     ) => (
       <Timeline
         onAnchorChange={setAnchors}
         absoluteAnchors={absoluteAnchors()}
+        getValue={getValue}
         d={d}
         {...props}
       />
