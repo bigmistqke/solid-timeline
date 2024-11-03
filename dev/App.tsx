@@ -113,12 +113,14 @@ function App() {
           min={0}
           max={window.innerHeight}
           onTimeChange={setTime}
+          style={{ height: '50px' }}
         />
         <LeftTimeline.Component
           time={time()}
           min={0}
           max={window.innerWidth}
           onTimeChange={setTime}
+          style={{ height: '50px' }}
         />
       </div>
     </div>

@@ -25,32 +25,77 @@ import { pointerHelper } from './utils/pointer-helper'
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                      Anchor                                    */
+/*                                     Handle                                     */
 /*                                                                                */
 /**********************************************************************************/
 
-const Anchor = (props: {
+const [draggingHandle, setDraggingHandle] = createSignal(false)
+
+function Handle(props: {
+  position: Vector
+  onChange: (position: Vector) => void
+  onChangeEnd: () => void
+}) {
+  const { project, zoom } = useTimeline()
+
+  const [active, setActive] = createSignal(false)
+
+  async function onPointerDown(e: MouseEvent) {
+    setActive(true)
+    setDraggingHandle(true)
+
+    const position = { ...props.position }
+
+    await pointerHelper(e, (delta) => {
+      props.onChange(
+        vector.subtract(position, {
+          x: delta.x / zoom().x,
+          y: delta.y / zoom().y,
+        })
+      )
+    })
+
+    props.onChangeEnd()
+    setActive(false)
+    setDraggingHandle(false)
+  }
+
+  return (
+    <g class={clsx(styles.handleContainer, active() && styles.active)}>
+      <circle
+        cx={project(props.position, 'x')}
+        cy={project(props.position, 'y')}
+        r="10"
+        onPointerDown={onPointerDown}
+        fill="transparent"
+        style={{ cursor: 'move' }}
+      />
+      <circle
+        class={styles.handle}
+        cx={project(props.position, 'x')}
+        cy={project(props.position, 'y')}
+        r="3"
+        fill="black"
+        style={{ 'pointer-events': 'none' }}
+      />
+    </g>
+  )
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                     Control                                     */
+/*                                                                                */
+/**********************************************************************************/
+
+function Control(props: {
   position: Vector
   control: Vector
   onChange: (position: Vector) => void
   onChangeEnd: () => void
-}) => {
-  const [dragging, setDragging] = createSignal(false)
-  const { project, zoom } = useTimeline()
-
-  async function onPointerDown(e: MouseEvent) {
-    setDragging(true)
-    const control = props.control
-    await pointerHelper(e, (delta) =>
-      props.onChange({
-        x: control.x - delta.x / zoom().x,
-        y: control.y - delta.y / zoom().y,
-      })
-    )
-    props.onChangeEnd()
-    setDragging(false)
-  }
-
+}) {
+  const { project } = useTimeline()
+  const [, rest] = splitProps(props, ['control', 'position'])
   return (
     <>
       <line
@@ -61,35 +106,18 @@ const Anchor = (props: {
         y2={project(props.control, 'y')}
         style={{ 'pointer-events': 'none' }}
       />
-      <g class={clsx(styles.handleContainer, dragging() && styles.active)}>
-        <circle
-          cx={project(props.control, 'x')}
-          cy={project(props.control, 'y')}
-          r="10"
-          onPointerDown={onPointerDown}
-          fill="transparent"
-          style={{ cursor: 'move' }}
-        />
-        <circle
-          class={styles.handle}
-          cx={project(props.control, 'x')}
-          cy={project(props.control, 'y')}
-          r="3"
-          fill="black"
-          style={{ 'pointer-events': 'none' }}
-        />
-      </g>
+      <Handle position={props.control} {...rest} />
     </>
   )
 }
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                      Point                                     */
+/*                                     Anchor                                     */
 /*                                                                                */
 /**********************************************************************************/
 
-function Point(props: {
+function Anchor(props: {
   position: Vector
   pre?: Vector
   post?: Vector
@@ -100,31 +128,15 @@ function Point(props: {
   onPostChange: (point: Vector) => void
   onPostChangeEnd: () => void
 }) {
-  const { project, zoom } = useTimeline()
-
-  async function onDrag(e: MouseEvent) {
-    const position = { ...props.position }
-    await pointerHelper(e, (delta) => {
-      const newPosition = vector.subtract(position, {
-        x: delta.x / zoom().x,
-        y: delta.y / zoom().y,
-      })
-      props.onPositionChange(newPosition)
-    })
-    props.onPositionChangeEnd()
-  }
-
   return (
     <>
-      <circle
-        cx={project(props.position, 'x')}
-        cy={project(props.position, 'y')}
-        r="5"
-        onMouseDown={onDrag}
-        style={{ cursor: 'move' }}
+      <Handle
+        position={props.position}
+        onChange={props.onPositionChange}
+        onChangeEnd={props.onPositionChangeEnd}
       />
       <Show when={props.pre}>
-        <Anchor
+        <Control
           position={props.position}
           control={props.pre!}
           onChange={props.onPreChange}
@@ -132,7 +144,7 @@ function Point(props: {
         />
       </Show>
       <Show when={props.post}>
-        <Anchor
+        <Control
           position={props.position}
           control={props.post!}
           onChange={props.onPostChange}
@@ -347,7 +359,7 @@ function Timeline(
           setPresence(undefined)
         }}
       >
-        <Show when={presence()}>
+        <Show when={!draggingHandle() && presence()}>
           {(presence) => (
             <>
               <line
@@ -389,7 +401,7 @@ function Timeline(
         </Show>
         <For each={props.absoluteAnchors}>
           {([point, { pre, post } = {}], index) => (
-            <Point
+            <Anchor
               position={point}
               pre={pre}
               post={post}
@@ -425,18 +437,16 @@ function Timeline(
         <line
           x1={0}
           x2={domRect()?.width}
-          y1={project(props.max, 'y')}
-          y2={project(props.max, 'y')}
-          stroke="black"
-          stroke-dasharray="20 10"
+          y1={project(props.max, 'y') - 1}
+          y2={project(props.max, 'y') - 1}
+          stroke="lightgrey"
         />
         <line
           x1={0}
           x2={domRect()?.width}
-          y1={project(props.min, 'y')}
-          y2={project(props.min, 'y')}
-          stroke="black"
-          stroke-dasharray="20 10"
+          y1={project(props.min, 'y') + 1}
+          y2={project(props.min, 'y') + 1}
+          stroke="lightgrey"
         />
         {props.children}
       </svg>
@@ -453,38 +463,40 @@ function Timeline(
 export function createTimeline(config?: { initial?: Anchors }) {
   const [anchors, setAnchors] = createStore<Anchors>(config?.initial || [])
 
-  const absoluteAnchors = indexComputed(
-    () => anchors,
-    ([point, relativeControls], index) => {
-      const controls: { pre?: Vector; post?: Vector } = {
-        pre: undefined,
-        post: undefined,
+  const absoluteAnchors = createMemo(
+    indexComputed(
+      () => anchors,
+      ([point, relativeControls], index) => {
+        const controls: { pre?: Vector; post?: Vector } = {
+          pre: undefined,
+          post: undefined,
+        }
+
+        const pre = relativeControls?.pre
+        if (pre) {
+          const prev = anchors[index - 1][0]
+          const deltaX = vector.subtract(point, prev).x
+
+          controls.pre = vector.add(point, {
+            x: deltaX * pre.x * -1,
+            y: pre.y,
+          })
+        }
+
+        const post = relativeControls?.post
+        if (post) {
+          const next = anchors[index + 1][0]
+          const deltaX = vector.subtract(next, point).x
+
+          controls.post = vector.add(point, {
+            x: deltaX * post.x,
+            y: post.y,
+          })
+        }
+
+        return [point, controls] as Anchor
       }
-
-      const pre = relativeControls?.pre
-      if (pre) {
-        const prev = anchors[index - 1][0]
-        const deltaX = vector.subtract(point, prev).x
-
-        controls.pre = vector.add(point, {
-          x: deltaX * pre.x * -1,
-          y: pre.y,
-        })
-      }
-
-      const post = relativeControls?.post
-      if (post) {
-        const next = anchors[index + 1][0]
-        const deltaX = vector.subtract(next, point).x
-
-        controls.post = vector.add(point, {
-          x: deltaX * post.x,
-          y: post.y,
-        })
-      }
-
-      return [point, controls] as Anchor
-    }
+    )
   )
 
   const lookupMapSegments = createMemo(
