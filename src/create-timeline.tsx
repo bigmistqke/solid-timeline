@@ -8,21 +8,20 @@ import {
   createSignal,
   For,
   onCleanup,
-  onMount,
   Show,
   splitProps,
   useContext,
 } from 'solid-js'
 import { createStore, SetStoreFunction } from 'solid-js/store'
 import { createLookupMap } from './lib/create-cubic-lookup-map'
-import { interpolateYAtX } from './lib/interpolate-y-at-x'
+import { dFromAbsoluteAnchors } from './lib/d-from-anchors'
+import { getValueFromSegments } from './lib/get-value-from-segments'
+import { vector } from './lib/vector'
 import styles from './timeline.module.css'
 import type { Anchor, Anchors, Segment, Vector } from './types'
-import { getLastArrayItem } from './utils/get-last-array-item'
 import { indexComputed } from './utils/index-computed'
 import { whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
-import { vector } from './utils/vector'
 
 /**********************************************************************************/
 /*                                                                                */
@@ -105,7 +104,7 @@ function Point(props: {
 
   async function onDrag(e: MouseEvent) {
     const position = { ...props.position }
-    const { delta } = await pointerHelper(e, (delta) => {
+    await pointerHelper(e, (delta) => {
       const newPosition = vector.subtract(position, {
         x: delta.x / zoom().x,
         y: delta.y / zoom().y,
@@ -321,12 +320,11 @@ function Timeline(
     observer.observe(element)
     updateDomRect()
     onCleanup(() => observer.disconnect())
+
+    updatePadding()
+    createEffect(() => props.onZoomChange?.(zoom()))
+    createEffect(() => props.onOriginChange?.(origin()))
   }
-
-  createEffect(() => props.onZoomChange?.(zoom()))
-  createEffect(() => props.onOriginChange?.(origin()))
-
-  onMount(updatePadding)
 
   return (
     <TimelineContext.Provider
@@ -489,134 +487,25 @@ export function createTimeline(config?: { initial?: Anchors }) {
     }
   )
 
-  const _lookupMapSegments = indexComputed(absoluteAnchors, (point, index) => {
-    const next = absoluteAnchors()[index + 1]
-    return next
-      ? {
-          range: [point[0].x, next[0].x],
-          map: createLookupMap(point, next),
-        }
-      : undefined
-  })
-
   const lookupMapSegments = createMemo(
-    () => _lookupMapSegments().slice(0, -1) as Array<Segment>
+    indexComputed(absoluteAnchors, (point, index) => {
+      const next = absoluteAnchors()[index + 1]
+      return next
+        ? {
+            range: [point[0].x, next[0].x],
+            map: createLookupMap(point, next),
+          }
+        : undefined
+    })
   )
 
-  function closestPoint(time: number) {
-    const segments = lookupMapSegments()
-
-    if (segments.length === 0) {
-      return []
-    }
-
-    const min = segments[0]
-    const max = getLastArrayItem(segments)
-
-    if (time < min.range[0]) {
-      return [min.map[0], null]
-    }
-
-    if (time > max.range[1]) {
-      return [null, getLastArrayItem(max.map)]
-    }
-
-    // NOTE:  this is not the fastest way of doing these lookups
-    //        maybe we can investigate another method (binary search p.ex)
-    const segment = segments.find((segment) => {
-      return segment.range[0] < time && time < segment.range[1]
-    })
-
-    if (!segment) {
-      console.error('This should not happen')
-      return [null, null]
-    }
-
-    // NOTE:  this is not the fastest way of doing these lookups
-    //        maybe we can investigate another method (binary search p.ex)
-    for (let i = 0; i < segment.map.length; i++) {
-      const current = segment.map[i]
-      const next = segment.map[i + 1]
-
-      if (!next) continue
-
-      if (current.x < time && time < next.x) {
-        return [current, next]
-      }
-    }
-
-    return [null, null]
-  }
-
   function d(config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }) {
-    let d = ''
-
-    const zoom = {
-      x: 1,
-      y: 1,
-      ...config?.zoom,
-    }
-
-    const origin = {
-      x: 0,
-      y: 0,
-      ...config?.origin,
-    }
-
-    let currentCommand = ''
-
-    absoluteAnchors().forEach(([point, { pre, post } = {}], index, array) => {
-      let next = array[index + 1]
-
-      let segment = ''
-      if (pre) {
-        segment += (pre.x + origin.x) * zoom.x
-        segment += ' '
-        segment += (pre.y + origin.y) * zoom.y
-        segment += ' '
-      }
-      if (d === '') {
-        currentCommand = 'M'
-        segment += currentCommand
-        segment += ' '
-      }
-      segment += (point.x + origin.x) * zoom.x
-      segment += ' '
-      segment += (point.y + origin.y) * zoom.y
-      segment += ' '
-
-      if (index !== array.length - 1) {
-        let command =
-          !next![1]?.pre && !post ? 'L' : next![1]?.pre && post ? 'C' : 'Q'
-
-        if (command !== currentCommand) {
-          currentCommand = command
-          segment += currentCommand
-          segment += ' '
-        }
-
-        if (post) {
-          segment += (post.x + origin.x) * zoom.x
-          segment += ' '
-          segment += (post.y + origin.y) * zoom.y
-          segment += ' '
-        }
-      }
-
-      d += segment
-    })
-
-    return d
+    return dFromAbsoluteAnchors(absoluteAnchors(), config)
   }
 
   function getValue(time: number) {
-    const [left, right] = closestPoint(time)
-
-    if (left === null && right) return right.y
-    if (right === null && left) return left.y
-    if (left === null || right === null) return 0
-
-    return interpolateYAtX(left, right, time)
+    const segments = lookupMapSegments().slice(0, -1) as Array<Segment>
+    return getValueFromSegments(segments, time)
   }
 
   return {

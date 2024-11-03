@@ -1,4 +1,4 @@
-import { Vector } from '../types'
+import { Vector } from '#/types'
 
 export const vector = {
   subtract: (point1: Vector, point2: Vector | number) =>

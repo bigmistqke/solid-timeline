@@ -4,7 +4,7 @@ import {
   PrePoint,
   QuadraticBezierPoint,
   Vector,
-} from '../types'
+} from '#/types'
 
 const isPrePoint = (point: Anchor): point is PrePoint => !!point[1]?.pre
 const isPostPoint = (point: Anchor): point is PostPoint => !!point[1]?.post
