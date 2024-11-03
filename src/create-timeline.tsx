@@ -15,7 +15,7 @@ import {
 } from 'solid-js'
 import { createStore, SetStoreFunction } from 'solid-js/store'
 import styles from './timeline.module.css'
-import type { Anchor, Anchors, Vector } from './types'
+import type { Anchor, Anchors, Segment, Vector } from './types'
 import { createLookupMap } from './utils/create-cubic-lookup-map'
 import { getLastArrayItem } from './utils/get-last-array-item'
 import { indexComputed } from './utils/index-computed'
@@ -188,10 +188,12 @@ function Timeline(
     'absoluteAnchors',
     'd',
     'zoom',
+    'time',
   ])
   const [domRect, setDomRect] = createSignal<DOMRect>()
   const [paddingMax, setPaddingMax] = createSignal(0)
   const [paddingMin, setPaddingMin] = createSignal(0)
+  const [presence, setPresence] = createSignal<number | undefined>(undefined)
 
   const rangeHeight = () =>
     props.max + paddingMax() + paddingMin() - props.min * 2
@@ -335,7 +337,36 @@ function Timeline(
         unproject,
       }}
     >
-      <svg ref={onRef} width="100%" height="100%" {...rest}>
+      <svg
+        ref={onRef}
+        width="100%"
+        height="100%"
+        {...rest}
+        onPointerMove={(e) => {
+          setPresence(e.clientX)
+        }}
+        onPointerLeave={() => {
+          setPresence(undefined)
+        }}
+      >
+        <Show when={presence()}>
+          {(presence) => (
+            <>
+              <line
+                y1={0}
+                y2={domRect()?.height}
+                x1={presence()}
+                x2={presence()}
+                stroke="black"
+              />
+              <circle
+                cx={presence()}
+                cy={project(props.getValue(presence()), 'y')!}
+                r={3}
+              />
+            </>
+          )}
+        </Show>
         <Show when={props.time}>
           {(time) => (
             <>
@@ -458,8 +489,6 @@ export function createTimeline(config?: { initial?: Anchors }) {
     }
   )
 
-  createEffect(() => console.log(JSON.stringify(absoluteAnchors(), null, 2)))
-
   const _lookupMapSegments = indexComputed(absoluteAnchors, (point, index) => {
     const next = absoluteAnchors()[index + 1]
     return next
@@ -469,17 +498,20 @@ export function createTimeline(config?: { initial?: Anchors }) {
         }
       : undefined
   })
-  const lookupMapSegments = createMemo(() =>
-    _lookupMapSegments().filter((v) => v !== undefined)
+
+  const lookupMapSegments = createMemo(
+    () => _lookupMapSegments().slice(0, -1) as Array<Segment>
   )
 
   function closestPoint(time: number) {
-    if (lookupMapSegments().length === 0) {
+    const segments = lookupMapSegments()
+
+    if (segments.length === 0) {
       return []
     }
 
-    const min = lookupMapSegments()[0]
-    const max = getLastArrayItem(lookupMapSegments())
+    const min = segments[0]
+    const max = getLastArrayItem(segments)
 
     if (time < min.range[0]) {
       return [min.map[0], null]
@@ -491,7 +523,7 @@ export function createTimeline(config?: { initial?: Anchors }) {
 
     // NOTE:  this is not the fastest way of doing these lookups
     //        maybe we can investigate another method (binary search p.ex)
-    const segment = lookupMapSegments().find((segment) => {
+    const segment = segments.find((segment) => {
       return segment.range[0] < time && time < segment.range[1]
     })
 
@@ -580,9 +612,9 @@ export function createTimeline(config?: { initial?: Anchors }) {
   function getValue(time: number) {
     const [left, right] = closestPoint(time)
 
-    if (!left && right) return right.y
-    if (!right && left) return left.y
-    if (!left || !right) return 0
+    if (left === null && right) return right.y
+    if (right === null && left) return left.y
+    if (left === null || right === null) return 0
 
     return interpolateYAtX(left, right, time)
   }

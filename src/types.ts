@@ -13,3 +13,8 @@ export type LinearBezierPoint = [Vector]
 
 export type Anchor = [Vector, { pre?: Vector; post?: Vector }?]
 export type Anchors = Array<Anchor>
+
+export type Segment = {
+  range: number[]
+  map: Vector[]
+}

@@ -99,7 +99,7 @@ function App() {
     <div style={{ overflow: 'hidden', width: '100vw', height: '100vh' }}>
       <Circle
         left={LeftTimeline.getValue(time())}
-        top={TopTimeline.getValue(time())}
+        top={0 /* TopTimeline.getValue(time()) */}
       />
       <div
         style={{
@@ -108,12 +108,12 @@ function App() {
         }}
         ref={onRef}
       >
-        <TopTimeline.Component
+        {/* <TopTimeline.Component
           time={time()}
           min={0}
           max={window.innerHeight}
           onTimeChange={setTime}
-        />
+        /> */}
         <LeftTimeline.Component
           time={time()}
           min={0}
