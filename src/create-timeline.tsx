@@ -7,17 +7,18 @@ import {
   createSignal,
   For,
   onCleanup,
+  onMount,
   Show,
   splitProps,
   useContext,
 } from 'solid-js'
 import { createStore, SetStoreFunction } from 'solid-js/store'
-import type { Point, Points, Vector } from './types'
-import { when } from './utils/conditionals'
+import type { Anchor, Anchors, Vector } from './types'
 import { createLookupMap } from './utils/create-cubic-lookup-map'
 import { getLastArrayItem } from './utils/get-last-array-item'
 import { indexComputed } from './utils/index-computed'
 import { interpolateYAtX } from './utils/interpolate-y-at-x'
+import { whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
 import { vector } from './utils/vector'
 
@@ -31,17 +32,19 @@ const Anchor = (props: {
   position: Vector
   control: Vector
   onChange: (position: Vector) => void
+  onChangeEnd: () => void
 }) => {
-  const { project, zoom, clamp } = useTimeline()
+  const { project, zoom } = useTimeline()
 
   async function onPointerDown(e: MouseEvent) {
     const control = props.control
-    pointerHelper(e, (delta) =>
+    await pointerHelper(e, (delta) =>
       props.onChange({
         x: control.x - delta.x / zoom().x,
-        y: clamp(control.y - delta.y / zoom().y),
+        y: control.y - delta.y / zoom().y,
       })
     )
+    props.onChangeEnd()
   }
 
   return (
@@ -51,6 +54,8 @@ const Anchor = (props: {
         cy={project(props.control, 'y')}
         r="5"
         onPointerDown={onPointerDown}
+        fill="transparent"
+        stroke="black"
         style={{ cursor: 'move' }}
       />
       <line
@@ -76,23 +81,24 @@ function Point(props: {
   pre?: Vector
   post?: Vector
   onPositionChange: (point: Vector) => void
+  onPositionChangeEnd: () => void
   onPreChange: (point: Vector) => void
+  onPreChangeEnd: () => void
   onPostChange: (point: Vector) => void
+  onPostChangeEnd: () => void
 }) {
-  const { project, zoom, clamp } = useTimeline()
+  const { project, zoom } = useTimeline()
 
-  function onDrag(e: MouseEvent) {
+  async function onDrag(e: MouseEvent) {
     const position = { ...props.position }
-    pointerHelper(e, (delta) => {
+    const { delta } = await pointerHelper(e, (delta) => {
       const newPosition = vector.subtract(position, {
         x: delta.x / zoom().x,
         y: delta.y / zoom().y,
       })
-      props.onPositionChange({
-        ...newPosition,
-        y: clamp(newPosition.y),
-      })
+      props.onPositionChange(newPosition)
     })
+    props.onPositionChangeEnd()
   }
 
   return (
@@ -109,6 +115,7 @@ function Point(props: {
           position={props.position}
           control={props.pre!}
           onChange={props.onPreChange}
+          onChangeEnd={props.onPreChangeEnd}
         />
       </Show>
       <Show when={props.post}>
@@ -116,6 +123,7 @@ function Point(props: {
           position={props.position}
           control={props.post!}
           onChange={props.onPostChange}
+          onChangeEnd={props.onPostChangeEnd}
         />
       </Show>
     </>
@@ -133,7 +141,6 @@ const TimelineContext = createContext<{
   zoom: Accessor<Vector>
   project(point: Vector | number, type: 'x' | 'y'): number
   unproject(point: Vector | number, type: 'x' | 'y'): number
-  clamp(y: number): number
 }>()
 
 function useTimeline() {
@@ -151,8 +158,8 @@ function Timeline(
     zoom?: Partial<Vector>
     onZoomChange?: (zoom: Vector) => void
     onOriginChange?: (origin: Vector) => void
-    absoluteAnchors: Array<Point>
-    onAnchorChange: SetStoreFunction<Array<Point>>
+    absoluteAnchors: Array<Anchor>
+    onAnchorChange: SetStoreFunction<Array<Anchor>>
     d: (config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }) => string
   }
 ) {
@@ -166,25 +173,24 @@ function Timeline(
     'zoom',
   ])
   const [domRect, setDomRect] = createSignal<DOMRect>()
+  const [paddingMax, setPaddingMax] = createSignal(0)
+  const [paddingMin, setPaddingMin] = createSignal(0)
 
-  const yPose = createMemo(
-    when(domRect, (domRect) => {
-      const rangeHeight = props.max - props.min
-      return {
-        zoom: domRect.height / rangeHeight,
-        origin: rangeHeight / 2,
-      }
-    })
+  const rangeHeight = () =>
+    props.max + paddingMax() + paddingMin() - props.min * 2
+
+  const zoom = whenMemo(
+    domRect,
+    (domRect) => ({
+      x: 1,
+      y: (domRect.height / rangeHeight()) * (props.zoom?.y || 1),
+    }),
+    { x: 1, y: 1 }
   )
-
-  const zoom = createMemo(() => ({
-    x: 1,
-    y: (yPose()?.zoom || 1) * (props.zoom?.y || 1),
-  }))
 
   const origin = createMemo(() => ({
     x: 0,
-    y: (yPose()?.origin || 0) / (props.zoom?.y || 1),
+    y: (paddingMin() - props.min) / (props.zoom?.y || 1),
   }))
 
   function project(point: Vector | number, type: 'x' | 'y') {
@@ -197,17 +203,12 @@ function Timeline(
     return (value - origin()[type]) / zoom()[type]
   }
 
-  function clamp(y: number) {
-    const userZoomY = props.zoom?.y || 1
-    return Math.max(props.min / userZoomY, Math.min(props.max / userZoomY, y))
-  }
-
   function onAnchorChange({
-    absoluteAnchor,
+    position,
     index,
     type,
   }: {
-    absoluteAnchor: Vector
+    position: Vector
     index: number
     type: 'pre' | 'post'
   }) {
@@ -217,7 +218,7 @@ function Timeline(
         ? props.absoluteAnchors[index + 1]
         : props.absoluteAnchors[index - 1]
 
-    let absoluteX = unproject(absoluteAnchor, 'x')
+    let absoluteX = unproject(position, 'x')
 
     // Clamp anchor w the connected point
     if (
@@ -238,14 +239,14 @@ function Timeline(
     const deltaX = Math.abs(point.x - connectedPoint.x)
 
     const anchor = {
-      y: absoluteAnchor.y - point.y,
+      y: Math.floor(position.y - point.y),
       x: Math.abs(point.x - absoluteX) / deltaX,
     }
 
     props.onAnchorChange(index, 1, type, anchor)
   }
 
-  const onPositionChange = (index: number, position: Vector) => {
+  function onPositionChange(index: number, position: Vector) {
     const [prev] = props.absoluteAnchors[index - 1] || []
     const [next] = props.absoluteAnchors[index + 1] || []
 
@@ -261,6 +262,33 @@ function Timeline(
     props.onAnchorChange(index, 0, position)
   }
 
+  function maxPaddingFromVector(value: Vector) {
+    return Math.max(value.y, props.max) - props.max
+  }
+  function minPaddingFromVector(value: Vector) {
+    return props.min - Math.min(value.y, props.min)
+  }
+
+  function updatePadding() {
+    let min = 0
+    let max = 0
+    props.absoluteAnchors.forEach(([anchor, { pre, post } = {}]) => {
+      min = Math.max(min, minPaddingFromVector(anchor))
+      max = Math.max(max, maxPaddingFromVector(anchor))
+      if (pre) {
+        min = Math.max(min, minPaddingFromVector(pre))
+        max = Math.max(max, maxPaddingFromVector(pre))
+      }
+      if (post) {
+        min = Math.max(min, minPaddingFromVector(post))
+        max = Math.max(max, maxPaddingFromVector(post))
+      }
+    })
+
+    setPaddingMin(min)
+    setPaddingMax(max)
+  }
+
   function onRef(element: SVGSVGElement) {
     function updateDomRect() {
       setDomRect(element.getBoundingClientRect())
@@ -274,6 +302,8 @@ function Timeline(
   createEffect(() => props.onZoomChange?.(zoom()))
   createEffect(() => props.onOriginChange?.(origin()))
 
+  onMount(updatePadding)
+
   return (
     <TimelineContext.Provider
       value={{
@@ -281,7 +311,6 @@ function Timeline(
         zoom,
         project,
         unproject,
-        clamp,
       }}
     >
       <svg ref={onRef} width="100%" height="100%" {...rest}>
@@ -294,20 +323,23 @@ function Timeline(
               onPositionChange={(position) =>
                 onPositionChange(index(), position)
               }
-              onPreChange={(absoluteHandle) =>
+              onPositionChangeEnd={updatePadding}
+              onPreChange={(position) =>
                 onAnchorChange({
-                  absoluteAnchor: absoluteHandle,
+                  position,
                   index: index(),
                   type: 'pre',
                 })
               }
-              onPostChange={(absoluteHandle) =>
+              onPreChangeEnd={updatePadding}
+              onPostChange={(position) =>
                 onAnchorChange({
-                  absoluteAnchor: absoluteHandle,
+                  position,
                   index: index(),
                   type: 'post',
                 })
               }
+              onPostChangeEnd={updatePadding}
             />
           )}
         </For>
@@ -316,6 +348,22 @@ function Timeline(
           fill="transparent"
           d={props.d({ zoom: zoom(), origin: origin() })}
           style={{ 'pointer-events': 'none' }}
+        />
+        <line
+          x1={0}
+          x2={domRect()?.width}
+          y1={project(props.max, 'y')}
+          y2={project(props.max, 'y')}
+          stroke="black"
+          stroke-dasharray="20 10"
+        />
+        <line
+          x1={0}
+          x2={domRect()?.width}
+          y1={project(props.min, 'y')}
+          y2={project(props.min, 'y')}
+          stroke="black"
+          stroke-dasharray="20 10"
         />
         {props.children}
       </svg>
@@ -329,8 +377,10 @@ function Timeline(
 /*                                                                                */
 /**********************************************************************************/
 
-export function createTimeline(config?: { initialPoints?: Points }) {
-  const [anchors, setAnchors] = createStore<Points>(config?.initialPoints || [])
+export function createTimeline(config?: { initialPoints?: Anchors }) {
+  const [anchors, setAnchors] = createStore<Anchors>(
+    config?.initialPoints || []
+  )
 
   const absoluteAnchors = indexComputed(
     () => anchors,
@@ -362,9 +412,11 @@ export function createTimeline(config?: { initialPoints?: Points }) {
         })
       }
 
-      return [point, controls] as Point
+      return [point, controls] as Anchor
     }
   )
+
+  createEffect(() => console.log(JSON.stringify(absoluteAnchors(), null, 2)))
 
   const _lookupMapSegments = indexComputed(absoluteAnchors, (point, index) => {
     const next = absoluteAnchors()[index + 1]
@@ -381,7 +433,7 @@ export function createTimeline(config?: { initialPoints?: Points }) {
 
   function closestPoint(time: number) {
     if (lookupMapSegments().length === 0) {
-      return
+      return []
     }
 
     const min = lookupMapSegments()[0]

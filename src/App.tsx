@@ -1,23 +1,18 @@
-import { createEffect, createSignal, Setter } from 'solid-js'
+import { createEffect, createSignal, onCleanup, Setter } from 'solid-js'
 import { createTimeline } from './create-timeline'
+import { Anchor } from './types'
 import { pointerHelper } from './utils/pointer-helper'
 
 function CustomTimeline(props: {
+  initialPoints: Array<Anchor>
   time: number
   onTimeChange: Setter<number>
-  onValueChange: (value: number) => void
+  onValueChange: (value: number | undefined) => void
+  min: number
+  max: number
 }) {
   const Timeline = createTimeline({
-    initialPoints: [
-      [{ x: 50, y: -100 }],
-      [{ x: 400, y: 100 }],
-      [
-        { x: 400 + 350, y: 0 },
-        {
-          pre: { x: 0.5, y: 0 },
-        },
-      ],
-    ],
+    initialPoints: props.initialPoints,
   })
 
   const onDrag = async (e: MouseEvent) => {
@@ -32,11 +27,10 @@ function CustomTimeline(props: {
 
   return (
     <Timeline.Component
-      max={100}
-      min={-100}
-      zoom={{ y: 0.5 }}
       onOriginChange={setOrigin}
       onZoomChange={setZoom}
+      min={props.min}
+      max={props.max}
       style={{
         height: '100px',
         width: '100vw',
@@ -62,13 +56,6 @@ function CustomTimeline(props: {
         cy={(Timeline.getValue(props.time)! + origin().y) * zoom().y}
         r={3}
       />
-      {/* <line
-        x1={0}
-        x2={window.innerWidth}
-        y1={(Timeline.getValue(props.time)! + origin().y) * zoom().y}
-        y2={(Timeline.getValue(props.time)! + origin().y) * zoom().y}
-        stroke="black"
-      /> */}
     </Timeline.Component>
   )
 }
@@ -77,11 +64,12 @@ function Circle(props: { top: number; left: number }) {
   return (
     <div
       style={{
+        position: 'fixed',
         'border-radius': '50%',
         background: 'blue',
         height: '100px',
         width: '100px',
-        transform: `translate(${props.top}px, ${props.left}px)`,
+        transform: `translate(calc(${props.left}px - 50%), calc(${props.top}px - 50%))`,
       }}
     />
   )
@@ -91,27 +79,101 @@ function App() {
   const [time, setTime] = createSignal(100)
   const [top, setTop] = createSignal(0)
   const [left, setLeft] = createSignal(0)
+  const [domRect, setDomRect] = createSignal<DOMRect>()
 
   const loop = () => {
     requestAnimationFrame(loop)
-
-    setTime((performance.now() / 10) % 1000)
+    setTime((performance.now() / 10) % (domRect()?.width || 1000))
   }
   loop()
 
+  function onRef(element: HTMLDivElement) {
+    function updateDomRect() {
+      setDomRect(element.getBoundingClientRect())
+    }
+    const observer = new ResizeObserver(updateDomRect)
+    observer.observe(element)
+    updateDomRect()
+    onCleanup(() => observer.disconnect())
+  }
+
   return (
-    <div style={{ display: 'flex', 'flex-direction': 'column' }}>
-      <CustomTimeline
-        time={time()}
-        onTimeChange={setTime}
-        onValueChange={setTop}
-      />
-      <CustomTimeline
-        time={time()}
-        onTimeChange={setTime}
-        onValueChange={setLeft}
-      />
+    <div style={{ overflow: 'hidden', width: '100vw', height: '100vh' }}>
       <Circle left={left()} top={top()} />
+      <div
+        style={{
+          display: 'flex',
+          'flex-direction': 'column',
+        }}
+        ref={onRef}
+      >
+        <CustomTimeline
+          time={time()}
+          min={0}
+          max={window.innerHeight}
+          onTimeChange={setTime}
+          onValueChange={setTop}
+          initialPoints={[
+            [{ x: 0, y: 0 }],
+            [
+              { x: 400, y: 300 },
+              {
+                pre: { x: 0.5, y: 0 },
+                post: { x: 0.5, y: 0 },
+              },
+            ],
+            [
+              { x: 800, y: 300 },
+              {
+                pre: { x: 0.5, y: 0 },
+              },
+            ],
+            [
+              { x: 1200, y: 500 },
+              {
+                pre: { x: 0.5, y: 0 },
+              },
+            ],
+            [
+              { x: 1600, y: 750 },
+              {
+                pre: { x: 0.5, y: 0 },
+              },
+            ],
+          ]}
+        />
+        <CustomTimeline
+          time={time()}
+          min={0}
+          max={window.innerWidth}
+          onTimeChange={setTime}
+          onValueChange={setLeft}
+          initialPoints={[
+            [{ x: 0, y: 0 }],
+            [{ x: 300, y: 750 }],
+            [
+              { x: 600, y: 0 },
+              {
+                pre: { x: 0.5, y: 0 },
+              },
+            ],
+            [
+              { x: 900, y: 500 },
+              {
+                pre: { x: 0.5, y: 0 },
+                post: { x: 0.5, y: 0 },
+              },
+            ],
+            [{ x: 1200, y: 100 }],
+            [
+              { x: 1500, y: 750 },
+              {
+                pre: { x: 0.5, y: 0 },
+              },
+            ],
+          ]}
+        />
+      </div>
     </div>
   )
 }

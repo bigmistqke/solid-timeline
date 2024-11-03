@@ -1,6 +1,6 @@
-import { Points } from '../types'
+import { Anchors } from '../types'
 
-export function dFromPoints(points: Points) {
+export function dFromPoints(points: Anchors) {
   let d = ''
 
   points.forEach(([point, { pre, post }]) => {

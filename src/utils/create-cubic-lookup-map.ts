@@ -1,15 +1,15 @@
 import {
-  Point,
+  Anchor,
   PostPoint,
   PrePoint,
   QuadraticBezierPoint,
   Vector,
 } from '../types'
 
-const isPrePoint = (point: Point): point is PrePoint => !!point[1]?.pre
-const isPostPoint = (point: Point): point is PostPoint => !!point[1]?.post
+const isPrePoint = (point: Anchor): point is PrePoint => !!point[1]?.pre
+const isPostPoint = (point: Anchor): point is PostPoint => !!point[1]?.post
 
-export function createLookupMap(start: Point, end: Point, amount = 30) {
+export function createLookupMap(start: Anchor, end: Anchor, amount = 30) {
   if (isPostPoint(start) && isPrePoint(end)) {
     return createCubicLookupMap(start, end, amount)
   } else if (!isPostPoint(start) && !isPrePoint(end)) {
@@ -46,8 +46,8 @@ export const createCubicLookupMap = (
 }
 
 const createLinearLookupMap = (
-  [start]: Point,
-  [end]: Point,
+  [start]: Anchor,
+  [end]: Anchor,
   amount = 60
 ): Array<Vector> => {
   const step = (type: 'x' | 'y', t: number) =>

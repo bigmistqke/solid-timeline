@@ -11,6 +11,5 @@ export type CubicPoint = PostPoint | CenterPoint | PrePoint
 export type QuadraticBezierPoint = [Vector, { pre?: Vector; post?: Vector }]
 export type LinearBezierPoint = [Vector]
 
-export type Point = [Vector, { pre?: Vector; post?: Vector }?]
-
-export type Points = Array<Point>
+export type Anchor = [Vector, { pre?: Vector; post?: Vector }?]
+export type Anchors = Array<Anchor>

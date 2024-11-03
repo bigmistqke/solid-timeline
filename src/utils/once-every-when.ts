@@ -1,40 +1,52 @@
-import { Accessor, createEffect } from 'solid-js'
+import { Accessor, createEffect, createMemo } from 'solid-js'
 
 export function once<
   T,
   const TAccessor extends Accessor<T> | T,
   const TValues extends TAccessor extends ((...args: any[]) => any) | undefined
-    ? Exclude<ReturnType<Exclude<TAccessor, undefined>>, null | undefined | false>
+    ? Exclude<
+        ReturnType<Exclude<TAccessor, undefined>>,
+        null | undefined | false
+      >
     : Exclude<TAccessor, null | undefined | false>,
-  const TResult,
->(accessor: TAccessor, callback: (value: TValues) => TResult): TResult | undefined
+  const TResult
+>(
+  accessor: TAccessor,
+  callback: (value: TValues) => TResult
+): TResult | undefined
 
 export function once<
   T,
   const TAccessor extends Accessor<T> | T,
   const TValues extends TAccessor extends ((...args: any[]) => any) | undefined
-    ? Exclude<ReturnType<Exclude<TAccessor, undefined>>, null | undefined | false>
+    ? Exclude<
+        ReturnType<Exclude<TAccessor, undefined>>,
+        null | undefined | false
+      >
     : Exclude<TAccessor, null | undefined | false>,
   const TResult,
-  const TFallbackResult,
+  const TFallbackResult
 >(
   accessor: TAccessor,
   callback: (value: TValues) => TResult,
-  fallback: () => TFallbackResult,
+  fallback: () => TFallbackResult
 ): TResult | TFallbackResult
 
 export function once<
   T,
   const TAccessor extends Accessor<T> | T,
   const TValues extends TAccessor extends ((...args: any[]) => any) | undefined
-    ? Exclude<ReturnType<Exclude<TAccessor, undefined>>, null | undefined | false>
+    ? Exclude<
+        ReturnType<Exclude<TAccessor, undefined>>,
+        null | undefined | false
+      >
     : Exclude<TAccessor, null | undefined | false>,
   const TResult,
-  const TFallbackResult,
+  const TFallbackResult
 >(
   accessor: TAccessor,
   callback: (value: TValues) => TResult,
-  fallback?: () => TFallbackResult,
+  fallback?: () => TFallbackResult
 ): TResult | TFallbackResult | undefined {
   const value = typeof accessor === 'function' ? accessor() : accessor
   return value ? callback(value) : fallback ? fallback() : undefined
@@ -51,37 +63,49 @@ export function when<
   T,
   const TAccessor extends Accessor<T> | T,
   const TValues extends TAccessor extends ((...args: any[]) => any) | undefined
-    ? Exclude<ReturnType<Exclude<TAccessor, undefined>>, null | undefined | false>
+    ? Exclude<
+        ReturnType<Exclude<TAccessor, undefined>>,
+        null | undefined | false
+      >
     : Exclude<TAccessor, null | undefined | false>,
-  const TResult,
->(accessor: TAccessor, callback: (value: TValues) => TResult): () => TResult | undefined
+  const TResult
+>(
+  accessor: TAccessor,
+  callback: (value: TValues) => TResult
+): () => TResult | undefined
 
 export function when<
   const T,
   const TAccessor extends Accessor<T> | T,
   const TValues extends TAccessor extends ((...args: any[]) => any) | undefined
-    ? Exclude<ReturnType<Exclude<TAccessor, undefined>>, null | undefined | false>
+    ? Exclude<
+        ReturnType<Exclude<TAccessor, undefined>>,
+        null | undefined | false
+      >
     : Exclude<TAccessor, null | undefined | false>,
   const TResult,
-  const TFallbackResult,
+  const TFallbackResult
 >(
   accessor: TAccessor,
   callback: (value: TValues) => TResult,
-  fallback: () => TFallbackResult,
+  fallback: () => TFallbackResult
 ): () => TResult | TFallbackResult
 
 export function when<
   T,
   const TAccessor extends Accessor<T> | T,
   const TValues extends TAccessor extends ((...args: any[]) => any) | undefined
-    ? Exclude<ReturnType<Exclude<TAccessor, undefined>>, null | undefined | false>
+    ? Exclude<
+        ReturnType<Exclude<TAccessor, undefined>>,
+        null | undefined | false
+      >
     : Exclude<TAccessor, null | undefined | false>,
   const TResult,
-  const TFallbackResult,
+  const TFallbackResult
 >(
   accessor: TAccessor,
   callback: (value: TValues) => TResult,
-  fallback?: () => TFallbackResult,
+  fallback?: () => TFallbackResult
 ): () => TResult | TFallbackResult | undefined {
   // @ts-expect-error
   return () => once(accessor, callback, fallback)
@@ -97,16 +121,24 @@ export function every<
   const T,
   TAccessors extends Array<Accessor<T> | T>,
   const TValues extends {
-    [TKey in keyof TAccessors]: TAccessors[TKey] extends ((...args: any[]) => any) | undefined
-      ? Exclude<ReturnType<Exclude<TAccessors[TKey], undefined>>, null | undefined | false>
+    [TKey in keyof TAccessors]: TAccessors[TKey] extends
+      | ((...args: any[]) => any)
+      | undefined
+      ? Exclude<
+          ReturnType<Exclude<TAccessors[TKey], undefined>>,
+          null | undefined | false
+        >
       : Exclude<TAccessors[TKey], null | undefined | false>
-  },
+  }
 >(...accessors: TAccessors) {
   function callback(): TValues | undefined {
     const values = new Array(accessors.length)
 
     for (let i = 0; i < accessors.length; i++) {
-      const _value = typeof accessors[i] === 'function' ? (accessors[i] as () => T)() : accessors[i]
+      const _value =
+        typeof accessors[i] === 'function'
+          ? (accessors[i] as () => T)()
+          : accessors[i]
       if (!_value) return undefined
       values[i] = _value
     }
@@ -118,7 +150,30 @@ export function every<
 
 export function whenEffect<T>(
   value: Accessor<T>,
-  callback: (value: Exclude<T, false | null | undefined>) => void,
+  callback: (value: Exclude<T, false | null | undefined>) => void
 ) {
-  createEffect(when(value, value => callback(value)))
+  createEffect(when(value, (value) => callback(value)))
+}
+
+export function whenMemo<T, U>(
+  value: Accessor<T>,
+  callback: (value: Exclude<T, false | null | undefined>) => U
+): Accessor<U | undefined>
+export function whenMemo<T, U>(
+  value: Accessor<T>,
+  callback: (value: Exclude<T, false | null | undefined>) => U,
+  defaultValue: NoInfer<U>
+): Accessor<U>
+export function whenMemo<T, U>(
+  value: Accessor<T>,
+  callback: (value: Exclude<T, false | null | undefined>) => U,
+  defaultValue?: NoInfer<U>
+) {
+  return createMemo(
+    when(
+      value,
+      (value) => callback(value),
+      () => defaultValue
+    )
+  )
 }
