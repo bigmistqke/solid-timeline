@@ -19,7 +19,7 @@ import { getValueFromSegments } from './lib/get-value-from-segments'
 import { vector } from './lib/vector'
 import styles from './timeline.module.css'
 import type { Anchor, Anchors, Segment, Vector } from './types'
-import { indexComputed } from './utils/index-computed'
+import { createIndexMemo } from './utils/create-index-memo'
 import { whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
 
@@ -242,6 +242,10 @@ function Timeline(
     'd',
     'zoom',
     'time',
+    'addAnchor',
+    'deleteAnchor',
+    'getValue',
+    'setAnchors',
   ])
   const [domRect, setDomRect] = createSignal<DOMRect>()
   const [paddingMax, setPaddingMax] = createSignal(0)
@@ -392,9 +396,7 @@ function Timeline(
         }}
         onDblClick={() => {
           const time = presence()
-          if (time) {
-            props.addAnchor(time)
-          }
+          if (time) props.addAnchor(time)
         }}
       >
         <path
@@ -459,51 +461,47 @@ function Timeline(
 export function createTimeline(config?: { initial?: Anchors }) {
   const [anchors, setAnchors] = createStore<Anchors>(config?.initial || [])
 
-  const absoluteAnchors = createMemo(
-    indexComputed(
-      () => anchors,
-      ([point, relativeControls], index) => {
-        const controls: { pre?: Vector; post?: Vector } = {
-          pre: undefined,
-          post: undefined,
-        }
-
-        const pre = relativeControls?.pre
-        if (pre) {
-          const prev = anchors[index - 1][0]
-          const deltaX = point.x - prev.x
-          controls.pre = vector.add(point, {
-            x: deltaX * pre.x * -1,
-            y: pre.y,
-          })
-        }
-
-        const post = relativeControls?.post
-        if (post) {
-          const next = anchors[index + 1][0]
-          const deltaX = next.x - point.x
-          controls.post = vector.add(point, {
-            x: deltaX * post.x,
-            y: post.y,
-          })
-        }
-
-        return [point, controls] as Anchor
+  const absoluteAnchors = createIndexMemo(
+    () => anchors,
+    ([point, relativeControls], index) => {
+      const controls: { pre?: Vector; post?: Vector } = {
+        pre: undefined,
+        post: undefined,
       }
-    )
+
+      const pre = relativeControls?.pre
+      if (pre) {
+        const prev = anchors[index - 1][0]
+        const deltaX = point.x - prev.x
+        controls.pre = vector.add(point, {
+          x: deltaX * pre.x * -1,
+          y: pre.y,
+        })
+      }
+
+      const post = relativeControls?.post
+      if (post) {
+        const next = anchors[index + 1][0]
+        const deltaX = next.x - point.x
+        controls.post = vector.add(point, {
+          x: deltaX * post.x,
+          y: post.y,
+        })
+      }
+
+      return [point, controls] as Anchor
+    }
   )
 
-  const lookupMapSegments = createMemo(
-    indexComputed(absoluteAnchors, (point, index) => {
-      const next = absoluteAnchors()[index + 1]
-      return next
-        ? {
-            range: [point[0].x, next[0].x],
-            map: createLookupMap(point, next),
-          }
-        : undefined
-    })
-  )
+  const lookupMapSegments = createIndexMemo(absoluteAnchors, (point, index) => {
+    const next = absoluteAnchors()[index + 1]
+    return next
+      ? {
+          range: [point[0].x, next[0].x],
+          map: createLookupMap(point, next),
+        }
+      : undefined
+  })
 
   function d(config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }) {
     return dFromAbsoluteAnchors(absoluteAnchors(), config)
