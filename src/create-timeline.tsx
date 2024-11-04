@@ -16,12 +16,7 @@ import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import { createLookupMap } from './lib/create-cubic-lookup-map'
 import { dFromAbsoluteAnchors } from './lib/d-from-anchors'
 import { getValueFromSegments } from './lib/get-value-from-segments'
-import {
-  addVector,
-  divideVector,
-  multiplyVector,
-  subtractVector,
-} from './lib/vector'
+import { addVector, divideVector, subtractVector } from './lib/vector'
 import styles from './timeline.module.css'
 import type { Anchor, Anchors, Segment, Vector } from './types'
 import { createIndexMemo } from './utils/create-index-memo'
@@ -322,11 +317,12 @@ function Timeline(
     const postRange = postPosition && subtractVector(position, postPosition)
 
     const pairedType = type === 'pre' ? 'post' : 'pre'
-    const pairedRange = pairedType === 'post' ? postRange : preRange
-    const range = type === 'post' ? postRange : preRange
-
-    let initialPairedControl: Vector | undefined = undefined
-    let initalPairedDelta: Vector | undefined = undefined
+    const ratio =
+      preRange && postRange
+        ? type === 'pre'
+          ? postRange.x / preRange.x
+          : preRange.x / postRange.x
+        : undefined
 
     await pointerHelper(event, ({ delta, event }) => {
       delta = divideVector(delta, zoom())
@@ -339,39 +335,12 @@ function Timeline(
       })
       props.setAnchors(index, 1, type, control)
 
-      // Symmetric dragging with paired anchor.
-      if (event.metaKey && pairedRange && range) {
-        if (initialPairedControl && initalPairedDelta) {
-          // Calculate ratio of change by
-          const ratio = divideVector(
-            // subtracting delta to the initial paired delta and
-            subtractVector(initalPairedDelta, delta),
-            // dividing it by its respective range
-            range
-          )
-          // Flip the y-value of this ratio
-          const pairedRatio = multiplyVector(ratio, { y: -1 })
-          // Applying paired ratio to the paired range
-          const pairedDelta = multiplyVector(pairedRatio, pairedRange)
-          // Apply paired delta to the initial paired control
-          const absolutePairedControl = addVector(
-            initialPairedControl,
-            pairedDelta
-          )
-          const pairedControl = absoluteToRelativeControl({
-            index,
-            type: pairedType,
-            absoluteControl: absolutePairedControl,
-          })
-          props.setAnchors(index, 1, pairedType, pairedControl)
-        } else {
-          // Initialise paired control/delta when pressing metaKey initially
-          initialPairedControl = controls![pairedType]
-          initalPairedDelta = delta
-        }
-      } else {
-        // Reset when releasing meta-key
-        initialPairedControl = undefined
+      // Symmetric dragging of paired control
+      if (event.metaKey && ratio) {
+        props.setAnchors(index, 1, pairedType, {
+          x: control.x,
+          y: control.y * ratio,
+        })
       }
     })
 
