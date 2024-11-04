@@ -261,14 +261,17 @@ function Timeline(
     return (value - origin()[type]) / zoom()[type]
   }
 
-  function getPairedAnchor(type: 'pre' | 'post', index: number): [] | Anchor {
+  function getPairedAnchorPosition(
+    type: 'pre' | 'post',
+    index: number
+  ): undefined | Vector {
     if (type === 'pre' && index === 0) {
-      return []
+      return undefined
     }
     if (type === 'post' && index === props.absoluteAnchors.length - 1) {
-      return []
+      return undefined
     }
-    return props.absoluteAnchors[type === 'pre' ? index - 1 : index + 1]
+    return props.absoluteAnchors[type === 'pre' ? index - 1 : index + 1][0]
   }
 
   /**
@@ -287,7 +290,7 @@ function Timeline(
     absoluteControl: Vector
   }) {
     const [position] = props.absoluteAnchors[index]
-    const [pairedPosition] = getPairedAnchor(type, index)
+    const pairedPosition = getPairedAnchorPosition(type, index)
 
     if (!pairedPosition) {
       throw `Attempting to process a control without a paired anchor.`
@@ -320,8 +323,8 @@ function Timeline(
   }) {
     const initialControl = { ...controls![type]! }
 
-    const [prePosition] = getPairedAnchor('pre', index)
-    const [postPosition] = getPairedAnchor('post', index)
+    const prePosition = getPairedAnchorPosition('pre', index)
+    const postPosition = getPairedAnchorPosition('post', index)
     const preRange = prePosition && subtractVector(position, prePosition)
     const postRange = postPosition && subtractVector(position, postPosition)
 
@@ -367,8 +370,8 @@ function Timeline(
   }) {
     const initialPosition = { ...anchor[0] }
 
-    const [pre] = getPairedAnchor('pre', index)
-    const [post] = getPairedAnchor('post', index)
+    const pre = getPairedAnchorPosition('pre', index)
+    const post = getPairedAnchorPosition('post', index)
 
     await pointerHelper(event, ({ delta }) => {
       delta = divideVector(delta, zoom())
