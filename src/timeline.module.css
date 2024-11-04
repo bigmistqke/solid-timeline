@@ -1,5 +1,27 @@
-.handleContainer:hover .handle,
-.handleContainer.active .handle {
-  fill: white;
-  stroke: black;
+.path {
+  fill: var(--color-path-stroke, none);
+  stroke: var(--color-path-stroke, black);
+}
+
+.timeIndicator {
+  & line {
+    stroke: var(--color-indicator-line-stroke, black);
+  }
+  & circle {
+    stroke: var(--color-indicator-circle-stroke, none);
+    fill: var(--color-indicator-circle-fill, black);
+  }
+}
+
+.handleContainer {
+  & .handle {
+    fill: var(--color-handle-fill, black);
+    stroke: var(--color-handle-stroke, none);
+  }
+
+  &:hover .handle,
+  &.handleContainer.active .handle {
+    fill: var(--color-handle-fill-active, white);
+    stroke: var(--color-handle-fill-active, black);
+  }
 }

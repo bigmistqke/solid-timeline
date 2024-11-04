@@ -75,7 +75,6 @@ function Handle(props: {
         cx={project(props.position, 'x')}
         cy={project(props.position, 'y')}
         r="3"
-        fill="black"
         style={{ 'pointer-events': 'none' }}
       />
     </g>
@@ -130,11 +129,6 @@ function Anchor(props: {
 }) {
   return (
     <>
-      <Handle
-        position={props.position}
-        onChange={props.onPositionChange}
-        onChangeEnd={props.onPositionChangeEnd}
-      />
       <Show when={props.pre}>
         <Control
           position={props.position}
@@ -151,13 +145,35 @@ function Anchor(props: {
           onChangeEnd={props.onPostChangeEnd}
         />
       </Show>
+      <Handle
+        position={props.position}
+        onChange={props.onPositionChange}
+        onChangeEnd={props.onPositionChangeEnd}
+      />
     </>
   )
 }
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                    Timeline                                    */
+/*                                 Time Indicator                                 */
+/*                                                                                */
+/**********************************************************************************/
+
+function TimeIndicator(props: { height: number; time: number }) {
+  const { project, getValue } = useTimeline()
+
+  return (
+    <g class={styles.timeIndicator}>
+      <line y1={0} y2={props.height} x1={props.time} x2={props.time} />
+      <circle cx={props.time} cy={project(getValue(props.time), 'y')!} r={3} />
+    </g>
+  )
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                Timeline Context                                */
 /*                                                                                */
 /**********************************************************************************/
 
@@ -166,6 +182,7 @@ const TimelineContext = createContext<{
   zoom: Accessor<Vector>
   project(point: Vector | number, type: 'x' | 'y'): number
   unproject(point: Vector | number, type: 'x' | 'y'): number
+  getValue(time: number): number
 }>()
 
 function useTimeline() {
@@ -175,6 +192,12 @@ function useTimeline() {
   }
   return context
 }
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                    Timeline                                    */
+/*                                                                                */
+/**********************************************************************************/
 
 function Timeline(
   props: ComponentProps<'svg'> & {
@@ -319,11 +342,6 @@ function Timeline(
     setPaddingMax(max)
   }
 
-  function onDrag(e: MouseEvent) {
-    const time = props.time!
-    pointerHelper(e, (delta) => props.onTimeChange?.(time - delta.x))
-  }
-
   function onRef(element: SVGSVGElement) {
     function updateDomRect() {
       setDomRect(element.getBoundingClientRect())
@@ -345,6 +363,7 @@ function Timeline(
         zoom,
         project,
         unproject,
+        getValue: props.getValue,
       }}
     >
       <svg
@@ -359,44 +378,19 @@ function Timeline(
           setPresence(undefined)
         }}
       >
+        <path
+          class={styles.path}
+          d={props.d({ zoom: zoom(), origin: origin() })}
+          style={{ 'pointer-events': 'none' }}
+        />
         <Show when={!draggingHandle() && presence()}>
           {(presence) => (
-            <>
-              <line
-                y1={0}
-                y2={domRect()?.height}
-                x1={presence()}
-                x2={presence()}
-                stroke="black"
-              />
-              <circle
-                cx={presence()}
-                cy={project(props.getValue(presence()), 'y')!}
-                r={3}
-              />
-            </>
+            <TimeIndicator height={window.innerHeight} time={presence()} />
           )}
         </Show>
         <Show when={props.time}>
           {(time) => (
-            <>
-              <line
-                x1={time()}
-                x2={time()}
-                y1={0}
-                y2={window.innerHeight}
-                onPointerDown={onDrag}
-                stroke="black"
-                style={{
-                  cursor: 'ew-resize',
-                }}
-              />
-              <circle
-                cx={time()}
-                cy={project(props.getValue(time()), 'y')!}
-                r={3}
-              />
-            </>
+            <TimeIndicator height={window.innerHeight} time={time()} />
           )}
         </Show>
         <For each={props.absoluteAnchors}>
@@ -428,12 +422,6 @@ function Timeline(
             />
           )}
         </For>
-        <path
-          stroke="black"
-          fill="transparent"
-          d={props.d({ zoom: zoom(), origin: origin() })}
-          style={{ 'pointer-events': 'none' }}
-        />
         <line
           x1={0}
           x2={domRect()?.width}
