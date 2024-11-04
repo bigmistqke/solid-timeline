@@ -21,7 +21,7 @@ function closestPoint(segments: Array<Segment>, time: number) {
   // NOTE:  this is not the fastest way of doing these lookups
   //        maybe we can investigate another method (binary search p.ex)
   const segment = segments.find((segment) => {
-    return segment.range[0] <= time && time < segment.range[1]
+    return segment.range[0] <= time && time <= segment.range[1]
   })
 
   if (!segment) {
@@ -37,7 +37,7 @@ function closestPoint(segments: Array<Segment>, time: number) {
 
     if (!next) continue
 
-    if (current.x < time && time < next.x) {
+    if (current.x <= time && time <= next.x) {
       return [current, next]
     }
   }
