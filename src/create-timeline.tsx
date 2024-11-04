@@ -6,7 +6,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  For,
+  Index,
   onCleanup,
   Show,
   splitProps,
@@ -33,26 +33,19 @@ const [draggingHandle, setDraggingHandle] = createSignal(false)
 
 function Handle(props: {
   position: Vector
-  onChange(position: Vector, delta: Vector, event: MouseEvent): void
-  onChangeEnd(): void
+  onDragStart(event: MouseEvent): Promise<void>
   onDblClick?(e: MouseEvent): void
 }) {
-  const { project, zoom } = useTimeline()
+  const { project } = useTimeline()
 
   const [active, setActive] = createSignal(false)
 
-  async function onPointerDown(e: MouseEvent) {
+  async function onPointerDown(event: MouseEvent) {
     setActive(true)
     setDraggingHandle(true)
 
-    const position = { ...props.position }
+    await props.onDragStart(event)
 
-    await pointerHelper(e, (delta) => {
-      delta = vector.divide(delta, zoom())
-      props.onChange(vector.subtract(position, delta), delta, e)
-    })
-
-    props.onChangeEnd()
     setActive(false)
     setDraggingHandle(false)
   }
@@ -93,8 +86,7 @@ function Handle(props: {
 function Control(props: {
   position: Vector
   control: Vector
-  onChange(position: Vector, delta: Vector, event: MouseEvent): void
-  onChangeEnd(): void
+  onDragStart(event: MouseEvent): Promise<void>
 }) {
   const { project } = useTimeline()
   const [, rest] = splitProps(props, ['control', 'position'])
@@ -127,44 +119,85 @@ function Anchor(props: {
   post?: Vector
   pre?: Vector
 }) {
+  const { zoom } = useTimeline()
   return (
     <>
       <Show when={props.pre}>
         <Control
           position={props.position}
           control={props.pre!}
-          onChange={(position, delta, event) => {
-            props.onChange('pre', position)
-            if (event.metaKey && props.post) {
-              props.onChange(
-                'post',
-                vector.subtract(props.post, vector.multiply(delta, -1))
-              )
-            }
+          onDragStart={async (event) => {
+            const pre = { ...props.pre! }
+            let post: Vector | undefined = undefined
+            let postDelta: Vector | undefined = undefined
+
+            await pointerHelper(event, ({ delta, event }) => {
+              delta = vector.divide(delta, zoom())
+              props.onChange('pre', vector.subtract(pre, delta))
+
+              if (event.metaKey && props.post) {
+                if (post && postDelta) {
+                  props.onChange(
+                    'post',
+                    vector.add(post, vector.subtract(delta, postDelta))
+                  )
+                } else {
+                  post = props.post
+                  postDelta = delta
+                }
+              } else {
+                post = undefined
+              }
+            })
+
+            props.onChangeEnd()
           }}
-          onChangeEnd={props.onChangeEnd}
         />
       </Show>
       <Show when={props.post}>
         <Control
           position={props.position}
           control={props.post!}
-          onChange={(position, delta, event) => {
-            props.onChange('post', position)
-            if (event.metaKey && props.pre) {
-              props.onChange(
-                'pre',
-                vector.subtract(props.pre, vector.multiply(delta, -1))
-              )
-            }
+          onDragStart={async (event) => {
+            const post = { ...props.post! }
+            let pre: Vector | undefined = undefined
+            let preDelta: Vector | undefined = undefined
+
+            await pointerHelper(event, ({ delta, event }) => {
+              delta = vector.divide(delta, zoom())
+              props.onChange('post', vector.subtract(post, delta))
+
+              if (event.metaKey && props.post) {
+                if (pre && preDelta) {
+                  props.onChange(
+                    'pre',
+                    vector.add(pre, vector.subtract(delta, preDelta))
+                  )
+                } else {
+                  pre = props.pre
+                  preDelta = delta
+                }
+              } else {
+                pre = undefined
+              }
+            })
+
+            props.onChangeEnd()
           }}
-          onChangeEnd={props.onChangeEnd}
         />
       </Show>
       <Handle
         position={props.position}
-        onChange={(position) => props.onChange('position', position)}
-        onChangeEnd={props.onChangeEnd}
+        onDragStart={async (event) => {
+          const position = { ...props.position }
+
+          await pointerHelper(event, ({ delta }) => {
+            delta = vector.divide(delta, zoom())
+            props.onChange('position', vector.subtract(position, delta))
+          })
+
+          props.onChangeEnd()
+        }}
         onDblClick={props.onDeleteAnchor}
       />
     </>
@@ -414,24 +447,29 @@ function Timeline(
             <TimeIndicator height={window.innerHeight} time={time()} />
           )}
         </Show>
-        <For each={props.absoluteAnchors}>
-          {([point, { pre, post } = {}], index) => (
-            <Anchor
-              position={point}
-              pre={pre}
-              post={post}
-              onDeleteAnchor={() => props.deleteAnchor(index())}
-              onChange={(type, position) => {
-                if (type === 'position') {
-                  onPositionChange(index(), position)
-                } else {
-                  onAnchorChange(type, index(), position)
-                }
-              }}
-              onChangeEnd={updatePadding}
-            />
-          )}
-        </For>
+        <Index each={props.absoluteAnchors}>
+          {(anchor, index) => {
+            const point = () => anchor()[0]
+            const control = (type: 'pre' | 'post') => anchor()[1]?.[type]
+
+            return (
+              <Anchor
+                position={point()}
+                pre={control('pre')}
+                post={control('post')}
+                onDeleteAnchor={() => props.deleteAnchor(index)}
+                onChange={(type, position) => {
+                  if (type === 'position') {
+                    onPositionChange(index, position)
+                  } else {
+                    onAnchorChange(type, index, position)
+                  }
+                }}
+                onChangeEnd={updatePadding}
+              />
+            )
+          }}
+        </Index>
         <line
           x1={0}
           x2={domRect()?.width}

@@ -1,3 +1,8 @@
+interface Vector {
+  x: number
+  y: number
+}
+
 /**
  * dragHelper
  *
@@ -7,20 +12,16 @@
  */
 export const pointerHelper = (
   e: MouseEvent,
-  callback?: (
-    delta: {
-      x: number
-      y: number
-    },
-    e: MouseEvent,
+  callback?: (event: {
+    delta: Vector
+    movement: Vector
+    event: MouseEvent
     time: number
-  ) => void
+  }) => void
 ) => {
   return new Promise<{
-    delta: {
-      x: number
-      y: number
-    }
+    delta: Vector
+    movement: Vector
     event: MouseEvent
     time: number
   }>((resolve) => {
@@ -29,26 +30,42 @@ export const pointerHelper = (
       y: e.clientY,
     }
     const startTime = performance.now()
-
-    const onPointerMove = (e: MouseEvent) => {
-      callback?.(
-        {
-          x: start.x - e.clientX,
-          y: start.y - e.clientY,
-        },
-        e,
-        performance.now() - startTime
-      )
+    let previousDelta = {
+      x: 0,
+      y: 0,
     }
-    const onPointerUp = (e: MouseEvent) => {
+
+    function getDataFromMouseEvent(event: MouseEvent) {
+      const delta = {
+        x: start.x - event.clientX,
+        y: start.y - event.clientY,
+      }
+      const movement = {
+        x: delta.x - previousDelta.x,
+        y: delta.y - previousDelta.y,
+      }
+      previousDelta = delta
+      return {
+        delta: {
+          x: start.x - event.clientX,
+          y: start.y - event.clientY,
+        },
+        movement,
+        event,
+        time: performance.now() - startTime,
+      }
+    }
+
+    const onPointerMove = (event: MouseEvent) => {
+      callback?.(getDataFromMouseEvent(event))
+    }
+
+    const onPointerUp = (event: MouseEvent) => {
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)
-      const delta = {
-        x: start.x - e.clientX,
-        y: start.y - e.clientY,
-      }
-      callback?.(delta, e, performance.now() - startTime)
-      resolve({ delta, event: e, time: performance.now() - startTime })
+      const data = getDataFromMouseEvent(event)
+      callback?.(data)
+      resolve(data)
     }
 
     window.addEventListener('pointermove', onPointerMove)
