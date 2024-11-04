@@ -155,8 +155,17 @@ function TimeIndicator(props: { height: number; time: number }) {
 
   return (
     <g class={styles.timeIndicator}>
-      <line y1={0} y2={props.height} x1={props.time} x2={props.time} />
-      <circle cx={props.time} cy={project(getValue(props.time), 'y')!} r={3} />
+      <line
+        y1={0}
+        y2={props.height}
+        x1={project(props.time, 'x')}
+        x2={project(props.time, 'x')}
+      />
+      <circle
+        cx={project(props.time, 'x')}
+        cy={project(getValue(props.time), 'y')!}
+        r={3}
+      />
     </g>
   )
 }
@@ -264,9 +273,9 @@ function Timeline(
 
   /**
    * `absoluteToRelativeControl` applies 3 operations on the given absolute control-vector:
-   * - Clamps so that it does not cross its own position and the position of its paired anchor.
-   * - Transforms absolute x-value to relative x-value (range 0-1)
-   * - Transforms absolute y-value to relative y-value (offset from position)
+   * - Clamps absolute x-value to ensure monotonicity of the curve
+   * - Absolute x-value to relative x-value (range 0-1)
+   * - Absolute y-value to relative y-value (offset from position)
    */
   function absoluteToRelativeControl({
     type,
