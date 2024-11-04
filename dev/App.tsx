@@ -95,6 +95,8 @@ function App() {
     onCleanup(() => observer.disconnect())
   }
 
+  const [zoomX, setZoomX] = createSignal(0.25)
+
   return (
     <div style={{ overflow: 'hidden', width: '100vw', height: '100vh' }}>
       <Circle
@@ -108,12 +110,21 @@ function App() {
         }}
         ref={onRef}
       >
+        <input
+          type="number"
+          value={zoomX()}
+          onInput={(e) => setZoomX(+e.currentTarget.value)}
+        />
+
         <TopTimeline.Component
           time={time()}
           min={0}
           max={window.innerHeight}
           onTimeChange={setTime}
           style={{ height: '50px' }}
+          zoom={{
+            x: zoomX(),
+          }}
         />
         <LeftTimeline.Component
           time={time()}

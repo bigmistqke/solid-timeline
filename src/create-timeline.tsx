@@ -236,7 +236,7 @@ function Timeline(
   const zoom = whenMemo(
     domRect,
     (domRect) => ({
-      x: 1,
+      x: props.zoom?.x || 1,
       y: (domRect.height / rangeHeight()) * (props.zoom?.y || 1),
     }),
     { x: 1, y: 1 }
@@ -257,12 +257,12 @@ function Timeline(
     return (value - origin()[type]) / zoom()[type]
   }
 
-  function getPairedAnchor(type: 'pre' | 'post', index: number) {
+  function getPairedAnchor(type: 'pre' | 'post', index: number): [] | Anchor {
     if (type === 'pre' && index === 0) {
-      throw `Attempting to get a pre-anchor of the first anchor.`
+      return []
     }
     if (type === 'post' && index === props.absoluteAnchors.length - 1) {
-      throw `Attempting to get a post-anchor of the last anchor.`
+      return []
     }
     return props.absoluteAnchors[type === 'pre' ? index - 1 : index + 1]
   }
@@ -281,35 +281,36 @@ function Timeline(
     index: number
     vector: Vector
   }) {
+    console.log('type', type, index)
     const [position] = props.absoluteAnchors[index]
     const [pairedPosition] = getPairedAnchor(type, index)
 
-    let absoluteX = unproject(vector, 'x')
+    if (!pairedPosition) {
+      throw `Attempting to process a control without a paired anchor.`
+    }
+
+    let { x } = vector
 
     // Clamp anchor w the paired position
     if (
-      (type === 'post' && pairedPosition.x < absoluteX) ||
-      (type !== 'post' && pairedPosition.x > absoluteX)
+      (type === 'post' && pairedPosition.x < x) ||
+      (type !== 'post' && pairedPosition.x > x)
     ) {
-      absoluteX = pairedPosition.x
+      x = pairedPosition.x
     }
 
     // Clamp anchor w the current position
     if (
-      (type === 'pre' && position.x < absoluteX) ||
-      (type !== 'pre' && position.x > absoluteX)
+      (type === 'pre' && position.x < x) ||
+      (type !== 'pre' && position.x > x)
     ) {
-      absoluteX = position.x
+      x = position.x
     }
 
-    const deltaX = Math.abs(position.x - pairedPosition.x)
-
-    const anchor = {
+    return {
       y: Math.floor(vector.y - position.y),
-      x: Math.abs(position.x - absoluteX) / deltaX,
+      x: Math.abs(position.x - x) / Math.abs(position.x - pairedPosition.x),
     }
-
-    return anchor
   }
 
   async function onControlDragStart({
@@ -327,11 +328,10 @@ function Timeline(
 
     const [prePosition] = getPairedAnchor('pre', index)
     const [postPosition] = getPairedAnchor('post', index)
-    const preRange = subtractVector(position, prePosition)
-    const postRange = subtractVector(position, postPosition)
+    const preRange = prePosition && subtractVector(position, prePosition)
+    const postRange = postPosition && subtractVector(position, postPosition)
 
     const pairedType = type === 'pre' ? 'post' : 'pre'
-    const hasPairedType = !!controls![pairedType]
     const pairedRange = pairedType === 'post' ? postRange : preRange
 
     let initialPairedControl: Vector | undefined = undefined
@@ -350,14 +350,14 @@ function Timeline(
       props.setAnchors(index, 1, type, control)
 
       // Symmetric dragging with paired anchor.
-      if (event.metaKey && hasPairedType) {
+      if (event.metaKey && pairedRange) {
         if (initialPairedControl && initalPairedDelta) {
           // Calculate ratio of change by
           const ratio = divideVector(
             // subtracting delta to the initial paired delta and
             subtractVector(initalPairedDelta, delta),
             // dividing it by its respective range
-            type === 'pre' ? preRange : postRange
+            pairedRange
           )
           // Flip the y-value of this ratio
           const pairedRatio = multiplyVector(ratio, { y: -1 })
