@@ -449,7 +449,7 @@ function Timeline(
         height="100%"
         {...rest}
         onPointerMove={(e) => {
-          setPresence(e.clientX)
+          setPresence(unproject(e.clientX, 'x'))
         }}
         onPointerLeave={() => {
           setPresence(undefined)
