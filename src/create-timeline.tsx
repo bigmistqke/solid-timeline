@@ -323,6 +323,7 @@ function Timeline(
 
     const pairedType = type === 'pre' ? 'post' : 'pre'
     const pairedRange = pairedType === 'post' ? postRange : preRange
+    const range = type === 'post' ? postRange : preRange
 
     let initialPairedControl: Vector | undefined = undefined
     let initalPairedDelta: Vector | undefined = undefined
@@ -339,14 +340,14 @@ function Timeline(
       props.setAnchors(index, 1, type, control)
 
       // Symmetric dragging with paired anchor.
-      if (event.metaKey && pairedRange) {
+      if (event.metaKey && pairedRange && range) {
         if (initialPairedControl && initalPairedDelta) {
           // Calculate ratio of change by
           const ratio = divideVector(
             // subtracting delta to the initial paired delta and
             subtractVector(initalPairedDelta, delta),
             // dividing it by its respective range
-            pairedRange
+            range
           )
           // Flip the y-value of this ratio
           const pairedRatio = multiplyVector(ratio, { y: -1 })
