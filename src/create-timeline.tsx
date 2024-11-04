@@ -268,20 +268,20 @@ function Timeline(
   }
 
   /**
-   * `processControl` applies 2 operations on the given control-vector:
+   * `absoluteToRelativeControl` applies 3 operations on the given absolute control-vector:
    * - Clamps so that it does not cross its own position and the position of its paired anchor.
-   * - Transforms absolute x-value to relative x-value.
+   * - Transforms absolute x-value to relative x-value (range 0-1)
+   * - Transforms absolute y-value to relative y-value (offset from position)
    */
-  function processControl({
+  function absoluteToRelativeControl({
     type,
     index,
-    vector,
+    absoluteControl,
   }: {
     type: 'pre' | 'post'
     index: number
-    vector: Vector
+    absoluteControl: Vector
   }) {
-    console.log('type', type, index)
     const [position] = props.absoluteAnchors[index]
     const [pairedPosition] = getPairedAnchor(type, index)
 
@@ -289,26 +289,16 @@ function Timeline(
       throw `Attempting to process a control without a paired anchor.`
     }
 
-    let { x } = vector
+    const [min, max] =
+      type === 'post' ? [position, pairedPosition] : [pairedPosition, position]
 
-    // Clamp anchor w the paired position
-    if (
-      (type === 'post' && pairedPosition.x < x) ||
-      (type !== 'post' && pairedPosition.x > x)
-    ) {
-      x = pairedPosition.x
-    }
-
-    // Clamp anchor w the current position
-    if (
-      (type === 'pre' && position.x < x) ||
-      (type !== 'pre' && position.x > x)
-    ) {
-      x = position.x
-    }
+    // Clamp x to ensure monotonicity of the curve (https://en.wikipedia.org/wiki/Monotonic_function)
+    const x = Math.max(min.x, Math.min(max.x, absoluteControl.x))
 
     return {
-      y: Math.floor(vector.y - position.y),
+      // Absolute value to absolute offset from position
+      y: Math.floor(absoluteControl.y - position.y),
+      // Absolute value to relative range [0-1]
       x: Math.abs(position.x - x) / Math.abs(position.x - pairedPosition.x),
     }
   }
@@ -341,11 +331,10 @@ function Timeline(
       delta = divideVector(delta, zoom())
 
       const absoluteControl = subtractVector(initialControl, delta)
-      // Process control: clamp and relative y-value.
-      const control = processControl({
-        type,
+      const control = absoluteToRelativeControl({
         index,
-        vector: absoluteControl,
+        type,
+        absoluteControl,
       })
       props.setAnchors(index, 1, type, control)
 
@@ -368,11 +357,10 @@ function Timeline(
             initialPairedControl,
             pairedDelta
           )
-          // Process control: clamp and relative y-value.
-          const pairedControl = processControl({
-            type: pairedType,
+          const pairedControl = absoluteToRelativeControl({
             index,
-            vector: absolutePairedControl,
+            type: pairedType,
+            absoluteControl: absolutePairedControl,
           })
           props.setAnchors(index, 1, pairedType, pairedControl)
         } else {
