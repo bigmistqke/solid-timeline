@@ -16,7 +16,12 @@ import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import { createLookupMap } from './lib/create-cubic-lookup-map'
 import { dFromAbsoluteAnchors } from './lib/d-from-anchors'
 import { getValueFromSegments } from './lib/get-value-from-segments'
-import { vector } from './lib/vector'
+import {
+  addVector,
+  divideVector,
+  multiplyVector,
+  subtractVector,
+} from './lib/vector'
 import styles from './timeline.module.css'
 import type { Anchor, Anchors, Segment, Vector } from './types'
 import { createIndexMemo } from './utils/create-index-memo'
@@ -112,92 +117,32 @@ function Control(props: {
 /**********************************************************************************/
 
 function Anchor(props: {
-  onChangeEnd(): void
   onDeleteAnchor(): void
-  onChange(type: 'position' | 'post' | 'pre', point: Vector): void
+  onControlDragStart(type: 'pre' | 'post', event: MouseEvent): Promise<void>
+  onPositionDragStart(event: MouseEvent): Promise<void>
   position: Vector
   post?: Vector
   pre?: Vector
 }) {
-  const { zoom } = useTimeline()
   return (
     <>
       <Show when={props.pre}>
         <Control
           position={props.position}
           control={props.pre!}
-          onDragStart={async (event) => {
-            const pre = { ...props.pre! }
-            let post: Vector | undefined = undefined
-            let postDelta: Vector | undefined = undefined
-
-            await pointerHelper(event, ({ delta, event }) => {
-              delta = vector.divide(delta, zoom())
-              props.onChange('pre', vector.subtract(pre, delta))
-
-              if (event.metaKey && props.post) {
-                if (post && postDelta) {
-                  props.onChange(
-                    'post',
-                    vector.add(post, vector.subtract(delta, postDelta))
-                  )
-                } else {
-                  post = props.post
-                  postDelta = delta
-                }
-              } else {
-                post = undefined
-              }
-            })
-
-            props.onChangeEnd()
-          }}
+          onDragStart={(event) => props.onControlDragStart('pre', event)}
         />
       </Show>
       <Show when={props.post}>
         <Control
           position={props.position}
           control={props.post!}
-          onDragStart={async (event) => {
-            const post = { ...props.post! }
-            let pre: Vector | undefined = undefined
-            let preDelta: Vector | undefined = undefined
-
-            await pointerHelper(event, ({ delta, event }) => {
-              delta = vector.divide(delta, zoom())
-              props.onChange('post', vector.subtract(post, delta))
-
-              if (event.metaKey && props.post) {
-                if (pre && preDelta) {
-                  props.onChange(
-                    'pre',
-                    vector.add(pre, vector.subtract(delta, preDelta))
-                  )
-                } else {
-                  pre = props.pre
-                  preDelta = delta
-                }
-              } else {
-                pre = undefined
-              }
-            })
-
-            props.onChangeEnd()
-          }}
+          onDragStart={(event) => props.onControlDragStart('post', event)}
         />
       </Show>
       <Handle
         position={props.position}
-        onDragStart={async (event) => {
-          const position = { ...props.position }
-
-          await pointerHelper(event, ({ delta }) => {
-            delta = vector.divide(delta, zoom())
-            props.onChange('position', vector.subtract(position, delta))
-          })
-
-          props.onChangeEnd()
-        }}
+        onDragStart={(event) => props.onPositionDragStart(event)}
         onDblClick={props.onDeleteAnchor}
       />
     </>
@@ -312,59 +257,171 @@ function Timeline(
     return (value - origin()[type]) / zoom()[type]
   }
 
-  function onAnchorChange(
-    type: 'pre' | 'post',
-    index: number,
-    position: Vector
-  ) {
-    const [point] = props.absoluteAnchors[index]
-    const [connectedPoint] =
-      type === 'post'
-        ? props.absoluteAnchors[index + 1]
-        : props.absoluteAnchors[index - 1]
-
-    let absoluteX = unproject(position, 'x')
-
-    // Clamp anchor w the connected point
-    if (
-      (type === 'post' && connectedPoint.x < absoluteX) ||
-      (type !== 'post' && connectedPoint.x > absoluteX)
-    ) {
-      absoluteX = connectedPoint.x
+  function getPairedAnchor(type: 'pre' | 'post', index: number) {
+    if (type === 'pre' && index === 0) {
+      throw `Attempting to get a pre-anchor of the first anchor.`
     }
-
-    // Clamp anchor w the current point
-    if (
-      (type === 'post' && absoluteX < point.x) ||
-      (type !== 'post' && absoluteX > point.x)
-    ) {
-      absoluteX = point.x
+    if (type === 'post' && index === props.absoluteAnchors.length - 1) {
+      throw `Attempting to get a post-anchor of the last anchor.`
     }
-
-    const deltaX = Math.abs(point.x - connectedPoint.x)
-
-    const anchor = {
-      y: Math.floor(position.y - point.y),
-      x: Math.abs(point.x - absoluteX) / deltaX,
-    }
-
-    props.setAnchors(index, 1, type, anchor)
+    return props.absoluteAnchors[type === 'pre' ? index - 1 : index + 1]
   }
 
-  function onPositionChange(index: number, position: Vector) {
-    const [prev] = props.absoluteAnchors[index - 1] || []
-    const [next] = props.absoluteAnchors[index + 1] || []
+  /**
+   * `processControl` applies 2 operations on the given control-vector:
+   * - Clamps so that it does not cross its own position and the position of its paired anchor.
+   * - Transforms absolute x-value to relative x-value.
+   */
+  function processControl({
+    type,
+    index,
+    vector,
+  }: {
+    type: 'pre' | 'post'
+    index: number
+    vector: Vector
+  }) {
+    const [position] = props.absoluteAnchors[index]
+    const [pairedPosition] = getPairedAnchor(type, index)
 
-    // Clamp position w the previous anchor
-    if (prev && position.x - 1 < prev.x) {
-      position.x = prev.x + 1
-    }
-    // Clamp position w the next anchor
-    if (next && position.x + 1 > next.x) {
-      position.x = next.x - 1
+    let absoluteX = unproject(vector, 'x')
+
+    // Clamp anchor w the paired position
+    if (
+      (type === 'post' && pairedPosition.x < absoluteX) ||
+      (type !== 'post' && pairedPosition.x > absoluteX)
+    ) {
+      absoluteX = pairedPosition.x
     }
 
-    props.setAnchors(index, 0, position)
+    // Clamp anchor w the current position
+    if (
+      (type === 'pre' && position.x < absoluteX) ||
+      (type !== 'pre' && position.x > absoluteX)
+    ) {
+      absoluteX = position.x
+    }
+
+    const deltaX = Math.abs(position.x - pairedPosition.x)
+
+    const anchor = {
+      y: Math.floor(vector.y - position.y),
+      x: Math.abs(position.x - absoluteX) / deltaX,
+    }
+
+    return anchor
+  }
+
+  async function onControlDragStart({
+    type,
+    event,
+    anchor: [position, controls],
+    index,
+  }: {
+    type: 'pre' | 'post'
+    event: MouseEvent
+    anchor: Anchor
+    index: number
+  }) {
+    const initialControl = { ...controls![type]! }
+
+    const [prePosition] = getPairedAnchor('pre', index)
+    const [postPosition] = getPairedAnchor('post', index)
+    const preRange = subtractVector(position, prePosition)
+    const postRange = subtractVector(position, postPosition)
+
+    const pairedType = type === 'pre' ? 'post' : 'pre'
+    const hasPairedType = !!controls![pairedType]
+    const pairedRange = pairedType === 'post' ? postRange : preRange
+
+    let initialPairedControl: Vector | undefined = undefined
+    let initalPairedDelta: Vector | undefined = undefined
+
+    await pointerHelper(event, ({ delta, event }) => {
+      delta = divideVector(delta, zoom())
+
+      const absoluteControl = subtractVector(initialControl, delta)
+      // Process control: clamp and relative y-value.
+      const control = processControl({
+        type,
+        index,
+        vector: absoluteControl,
+      })
+      props.setAnchors(index, 1, type, control)
+
+      // Symmetric dragging with paired anchor.
+      if (event.metaKey && hasPairedType) {
+        if (initialPairedControl && initalPairedDelta) {
+          // Calculate ratio of change by
+          const ratio = divideVector(
+            // subtracting delta to the initial paired delta and
+            subtractVector(initalPairedDelta, delta),
+            // dividing it by its respective range
+            type === 'pre' ? preRange : postRange
+          )
+          // Flip the y-value of this ratio
+          const pairedRatio = multiplyVector(ratio, { y: -1 })
+          // Applying paired ratio to the paired range
+          const pairedDelta = multiplyVector(pairedRatio, pairedRange)
+          // Apply paired delta to the initial paired control
+          const absolutePairedControl = addVector(
+            initialPairedControl,
+            pairedDelta
+          )
+          // Process control: clamp and relative y-value.
+          const pairedControl = processControl({
+            type: pairedType,
+            index,
+            vector: absolutePairedControl,
+          })
+          props.setAnchors(index, 1, pairedType, pairedControl)
+        } else {
+          // Initialise paired control/delta when pressing metaKey initially
+          initialPairedControl = controls![pairedType]
+          initalPairedDelta = delta
+        }
+      } else {
+        // Reset when releasing meta-key
+        initialPairedControl = undefined
+      }
+    })
+
+    updatePadding()
+  }
+
+  async function onPositionDragStart({
+    anchor,
+    event,
+    index,
+  }: {
+    anchor: Anchor
+    event: MouseEvent
+    index: number
+  }) {
+    const initialPosition = { ...anchor[0] }
+
+    const [pre] = getPairedAnchor('pre', index)
+    const [post] = getPairedAnchor('post', index)
+
+    await pointerHelper(event, ({ delta }) => {
+      delta = divideVector(delta, zoom())
+
+      const position = subtractVector(initialPosition, delta)
+
+      // Clamp position with the pre-anchor's position
+      if (pre && position.x - 1 < pre.x) {
+        position.x = pre.x + 1
+      }
+
+      // Clamp position with the pre-anchor's position
+      if (post && position.x + 1 > post.x) {
+        position.x = post.x - 1
+      }
+
+      props.setAnchors(index, 0, position)
+    })
+
+    updatePadding()
   }
 
   function maxPaddingFromVector(value: Vector) {
@@ -449,23 +506,20 @@ function Timeline(
         </Show>
         <Index each={props.absoluteAnchors}>
           {(anchor, index) => {
-            const point = () => anchor()[0]
+            const position = () => anchor()[0]
             const control = (type: 'pre' | 'post') => anchor()[1]?.[type]
-
             return (
               <Anchor
-                position={point()}
+                position={position()}
                 pre={control('pre')}
                 post={control('post')}
                 onDeleteAnchor={() => props.deleteAnchor(index)}
-                onChange={(type, position) => {
-                  if (type === 'position') {
-                    onPositionChange(index, position)
-                  } else {
-                    onAnchorChange(type, index, position)
-                  }
-                }}
-                onChangeEnd={updatePadding}
+                onControlDragStart={(type, event) =>
+                  onControlDragStart({ type, event, index, anchor: anchor() })
+                }
+                onPositionDragStart={(event) =>
+                  onPositionDragStart({ event, index, anchor: anchor() })
+                }
               />
             )
           }}
@@ -511,7 +565,7 @@ export function createTimeline(config?: { initial?: Anchors }) {
       if (pre) {
         const prev = anchors[index - 1][0]
         const deltaX = point.x - prev.x
-        controls.pre = vector.add(point, {
+        controls.pre = addVector(point, {
           x: deltaX * pre.x * -1,
           y: pre.y,
         })
@@ -521,7 +575,7 @@ export function createTimeline(config?: { initial?: Anchors }) {
       if (post) {
         const next = anchors[index + 1][0]
         const deltaX = next.x - point.x
-        controls.post = vector.add(point, {
+        controls.post = addVector(point, {
           x: deltaX * post.x,
           y: post.y,
         })
