@@ -12,7 +12,7 @@ import {
   splitProps,
   useContext,
 } from 'solid-js'
-import { createStore, SetStoreFunction } from 'solid-js/store'
+import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import { createLookupMap } from './lib/create-cubic-lookup-map'
 import { dFromAbsoluteAnchors } from './lib/d-from-anchors'
 import { getValueFromSegments } from './lib/get-value-from-segments'
@@ -33,8 +33,9 @@ const [draggingHandle, setDraggingHandle] = createSignal(false)
 
 function Handle(props: {
   position: Vector
-  onChange: (position: Vector) => void
-  onChangeEnd: () => void
+  onChange(position: Vector, delta: Vector, event: MouseEvent): void
+  onChangeEnd(): void
+  onDblClick?(e: MouseEvent): void
 }) {
   const { project, zoom } = useTimeline()
 
@@ -47,12 +48,8 @@ function Handle(props: {
     const position = { ...props.position }
 
     await pointerHelper(e, (delta) => {
-      props.onChange(
-        vector.subtract(position, {
-          x: delta.x / zoom().x,
-          y: delta.y / zoom().y,
-        })
-      )
+      delta = vector.divide(delta, zoom())
+      props.onChange(vector.subtract(position, delta), delta, e)
     })
 
     props.onChangeEnd()
@@ -65,9 +62,15 @@ function Handle(props: {
       <circle
         cx={project(props.position, 'x')}
         cy={project(props.position, 'y')}
-        r="10"
-        onPointerDown={onPointerDown}
         fill="transparent"
+        onDblClick={(e) => {
+          if (props.onDblClick) {
+            e.stopPropagation()
+            props.onDblClick(e)
+          }
+        }}
+        onPointerDown={onPointerDown}
+        r="10"
         style={{ cursor: 'move' }}
       />
       <circle
@@ -90,8 +93,8 @@ function Handle(props: {
 function Control(props: {
   position: Vector
   control: Vector
-  onChange: (position: Vector) => void
-  onChangeEnd: () => void
+  onChange(position: Vector, delta: Vector, event: MouseEvent): void
+  onChangeEnd(): void
 }) {
   const { project } = useTimeline()
   const [, rest] = splitProps(props, ['control', 'position'])
@@ -117,15 +120,12 @@ function Control(props: {
 /**********************************************************************************/
 
 function Anchor(props: {
+  onChangeEnd(): void
+  onDeleteAnchor(): void
+  onChange(type: 'position' | 'post' | 'pre', point: Vector): void
   position: Vector
-  pre?: Vector
   post?: Vector
-  onPositionChange: (point: Vector) => void
-  onPositionChangeEnd: () => void
-  onPreChange: (point: Vector) => void
-  onPreChangeEnd: () => void
-  onPostChange: (point: Vector) => void
-  onPostChangeEnd: () => void
+  pre?: Vector
 }) {
   return (
     <>
@@ -133,22 +133,39 @@ function Anchor(props: {
         <Control
           position={props.position}
           control={props.pre!}
-          onChange={props.onPreChange}
-          onChangeEnd={props.onPreChangeEnd}
+          onChange={(position, delta, event) => {
+            props.onChange('pre', position)
+            if (event.metaKey && props.post) {
+              props.onChange(
+                'post',
+                vector.subtract(props.post, vector.multiply(delta, -1))
+              )
+            }
+          }}
+          onChangeEnd={props.onChangeEnd}
         />
       </Show>
       <Show when={props.post}>
         <Control
           position={props.position}
           control={props.post!}
-          onChange={props.onPostChange}
-          onChangeEnd={props.onPostChangeEnd}
+          onChange={(position, delta, event) => {
+            props.onChange('post', position)
+            if (event.metaKey && props.pre) {
+              props.onChange(
+                'pre',
+                vector.subtract(props.pre, vector.multiply(delta, -1))
+              )
+            }
+          }}
+          onChangeEnd={props.onChangeEnd}
         />
       </Show>
       <Handle
         position={props.position}
-        onChange={props.onPositionChange}
-        onChangeEnd={props.onPositionChangeEnd}
+        onChange={(position) => props.onChange('position', position)}
+        onChangeEnd={props.onChangeEnd}
+        onDblClick={props.onDeleteAnchor}
       />
     </>
   )
@@ -201,17 +218,19 @@ function useTimeline() {
 
 function Timeline(
   props: ComponentProps<'svg'> & {
-    min: number
-    max: number
-    zoom?: Partial<Vector>
-    onZoomChange?: (zoom: Vector) => void
-    onOriginChange?: (origin: Vector) => void
-    onTimeChange?: (time: number) => void
     absoluteAnchors: Array<Anchor>
-    onAnchorChange: SetStoreFunction<Array<Anchor>>
-    d: (config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }) => string
-    getValue: (time: number) => number
+    addAnchor(time: number, value?: number): void
+    deleteAnchor(index: number): void
+    d(config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }): string
+    getValue(time: number): number
+    max: number
+    min: number
+    setAnchors: SetStoreFunction<Array<Anchor>>
+    onOriginChange?(origin: Vector): void
+    onTimeChange?(time: number): void
+    onZoomChange?(zoom: Vector): void
     time?: number
+    zoom?: Partial<Vector>
   }
 ) {
   const [, rest] = splitProps(props, [
@@ -256,15 +275,11 @@ function Timeline(
     return (value - origin()[type]) / zoom()[type]
   }
 
-  function onAnchorChange({
-    position,
-    index,
-    type,
-  }: {
+  function onAnchorChange(
+    type: 'pre' | 'post',
+    index: number,
     position: Vector
-    index: number
-    type: 'pre' | 'post'
-  }) {
+  ) {
     const [point] = props.absoluteAnchors[index]
     const [connectedPoint] =
       type === 'post'
@@ -296,7 +311,7 @@ function Timeline(
       x: Math.abs(point.x - absoluteX) / deltaX,
     }
 
-    props.onAnchorChange(index, 1, type, anchor)
+    props.setAnchors(index, 1, type, anchor)
   }
 
   function onPositionChange(index: number, position: Vector) {
@@ -312,7 +327,7 @@ function Timeline(
       position.x = next.x - 1
     }
 
-    props.onAnchorChange(index, 0, position)
+    props.setAnchors(index, 0, position)
   }
 
   function maxPaddingFromVector(value: Vector) {
@@ -342,20 +357,6 @@ function Timeline(
     setPaddingMax(max)
   }
 
-  function onRef(element: SVGSVGElement) {
-    function updateDomRect() {
-      setDomRect(element.getBoundingClientRect())
-    }
-    const observer = new ResizeObserver(updateDomRect)
-    observer.observe(element)
-    updateDomRect()
-    onCleanup(() => observer.disconnect())
-
-    updatePadding()
-    createEffect(() => props.onZoomChange?.(zoom()))
-    createEffect(() => props.onOriginChange?.(origin()))
-  }
-
   return (
     <TimelineContext.Provider
       value={{
@@ -367,7 +368,19 @@ function Timeline(
       }}
     >
       <svg
-        ref={onRef}
+        ref={(element) => {
+          function updateDomRect() {
+            setDomRect(element.getBoundingClientRect())
+          }
+          const observer = new ResizeObserver(updateDomRect)
+          observer.observe(element)
+          updateDomRect()
+          onCleanup(() => observer.disconnect())
+
+          updatePadding()
+          createEffect(() => props.onZoomChange?.(zoom()))
+          createEffect(() => props.onOriginChange?.(origin()))
+        }}
         width="100%"
         height="100%"
         {...rest}
@@ -376,6 +389,12 @@ function Timeline(
         }}
         onPointerLeave={() => {
           setPresence(undefined)
+        }}
+        onDblClick={() => {
+          const time = presence()
+          if (time) {
+            props.addAnchor(time)
+          }
         }}
       >
         <path
@@ -399,26 +418,15 @@ function Timeline(
               position={point}
               pre={pre}
               post={post}
-              onPositionChange={(position) =>
-                onPositionChange(index(), position)
-              }
-              onPositionChangeEnd={updatePadding}
-              onPreChange={(position) =>
-                onAnchorChange({
-                  position,
-                  index: index(),
-                  type: 'pre',
-                })
-              }
-              onPreChangeEnd={updatePadding}
-              onPostChange={(position) =>
-                onAnchorChange({
-                  position,
-                  index: index(),
-                  type: 'post',
-                })
-              }
-              onPostChangeEnd={updatePadding}
+              onDeleteAnchor={() => props.deleteAnchor(index())}
+              onChange={(type, position) => {
+                if (type === 'position') {
+                  onPositionChange(index(), position)
+                } else {
+                  onAnchorChange(type, index(), position)
+                }
+              }}
+              onChangeEnd={updatePadding}
             />
           )}
         </For>
@@ -463,8 +471,7 @@ export function createTimeline(config?: { initial?: Anchors }) {
         const pre = relativeControls?.pre
         if (pre) {
           const prev = anchors[index - 1][0]
-          const deltaX = vector.subtract(point, prev).x
-
+          const deltaX = point.x - prev.x
           controls.pre = vector.add(point, {
             x: deltaX * pre.x * -1,
             y: pre.y,
@@ -474,8 +481,7 @@ export function createTimeline(config?: { initial?: Anchors }) {
         const post = relativeControls?.post
         if (post) {
           const next = anchors[index + 1][0]
-          const deltaX = vector.subtract(next, point).x
-
+          const deltaX = next.x - point.x
           controls.post = vector.add(point, {
             x: deltaX * post.x,
             y: post.y,
@@ -508,23 +514,51 @@ export function createTimeline(config?: { initial?: Anchors }) {
     return getValueFromSegments(segments, time)
   }
 
+  function addAnchor(time: number, value = getValue(time)) {
+    setAnchors(
+      produce((anchors) => {
+        let index = anchors.findIndex(([anchor]) => {
+          return anchor.x > time
+        })
+        if (index === -1) return
+        anchors.splice(index, 0, [
+          { x: time, y: value },
+          { pre: { x: 0.5, y: 0 }, post: { x: 0.5, y: 0 } },
+        ])
+      })
+    )
+  }
+
+  function deleteAnchor(index: number) {
+    setAnchors(produce((anchors) => anchors.splice(index, 1)))
+  }
+
   return {
     absoluteAnchors,
     anchors,
     d,
     getValue,
     setAnchors,
+    deleteAnchor,
+    addAnchor,
     Component: (
       props: Omit<
         ComponentProps<typeof Timeline>,
-        'onAnchorChange' | 'absoluteAnchors' | 'd' | 'getValue'
+        | 'absoluteAnchors'
+        | 'addAnchor'
+        | 'd'
+        | 'getValue'
+        | 'setAnchors'
+        | 'deleteAnchor'
       >
     ) => (
       <Timeline
-        onAnchorChange={setAnchors}
         absoluteAnchors={absoluteAnchors()}
-        getValue={getValue}
+        addAnchor={addAnchor}
         d={d}
+        deleteAnchor={deleteAnchor}
+        getValue={getValue}
+        setAnchors={setAnchors}
         {...props}
       />
     ),
