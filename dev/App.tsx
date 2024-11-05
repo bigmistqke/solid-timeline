@@ -1,4 +1,5 @@
 import { createTimeline } from '#/create-timeline'
+import { Sheet } from '#/sheet'
 import { createSignal, onCleanup } from 'solid-js'
 
 function Circle(props: { top: number; left: number }) {
@@ -95,9 +96,6 @@ function App() {
     onCleanup(() => observer.disconnect())
   }
 
-  const [zoomX, setZoomX] = createSignal(0.25)
-  const [pan, setPan] = createSignal(0)
-
   return (
     <div style={{ overflow: 'hidden', width: '100vw', height: '100vh' }}>
       <Circle
@@ -111,35 +109,26 @@ function App() {
         }}
         ref={onRef}
       >
-        <input
-          type="number"
-          value={zoomX()}
-          onInput={(e) => setZoomX(+e.currentTarget.value)}
-        />
-        <TopTimeline.Component
-          time={time()}
-          min={0}
-          max={window.innerHeight}
-          onTimeChange={setTime}
-          onPan={setPan}
-          style={{ height: '50px' }}
-          pan={pan()}
-          zoom={{
-            x: zoomX(),
-          }}
-        />
-        <LeftTimeline.Component
-          time={time()}
-          min={0}
-          max={window.innerWidth}
-          onTimeChange={setTime}
-          style={{ height: '50px' }}
-          onPan={setPan}
-          pan={pan()}
-          zoom={{
-            x: zoomX(),
-          }}
-        />
+        <Sheet time={time()}>
+          <TopTimeline.Value>
+            <TopTimeline.Value.Input decimals={2} />
+            <TopTimeline.Value.Button>add</TopTimeline.Value.Button>
+          </TopTimeline.Value>
+          <LeftTimeline.Value>
+            <LeftTimeline.Value.Input decimals={2} />
+            <LeftTimeline.Value.Button>add</LeftTimeline.Value.Button>
+          </LeftTimeline.Value>
+          <TopTimeline.Component
+            min={0}
+            max={window.innerHeight}
+            style={{ height: '50px' }}
+          />
+          <LeftTimeline.Component
+            min={0}
+            max={window.innerWidth}
+            style={{ height: '50px' }}
+          />
+        </Sheet>
       </div>
     </div>
   )
