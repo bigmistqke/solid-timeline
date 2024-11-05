@@ -2,6 +2,7 @@ import {
   Accessor,
   ComponentProps,
   createContext,
+  createSignal,
   mergeProps,
   Setter,
   splitProps,
@@ -16,6 +17,8 @@ const SheetContext = createContext<{
   setZoomX: Setter<number>
   time: Accessor<number>
   setTime: Setter<number>
+  isDraggingHandle: Accessor<boolean>
+  setIsDraggingHandle: Setter<boolean>
 }>()
 
 export function useSheet() {
@@ -38,11 +41,21 @@ export function Sheet(
   const [pan, setPan] = createWritable(() => config.pan)
   const [zoomX, setZoomX] = createWritable(() => config.zoom)
   const [time, setTime] = createWritable(() => config.time)
+  const [isDraggingHandle, setIsDraggingHandle] = createSignal(false)
 
   return (
     <div {...rest}>
       <SheetContext.Provider
-        value={{ pan, setPan, zoomX, setZoomX, time, setTime }}
+        value={{
+          pan,
+          setPan,
+          zoomX,
+          setZoomX,
+          time,
+          setTime,
+          isDraggingHandle,
+          setIsDraggingHandle,
+        }}
       >
         {props.children}
       </SheetContext.Provider>
