@@ -96,6 +96,7 @@ function App() {
   }
 
   const [zoomX, setZoomX] = createSignal(0.25)
+  const [pan, setPan] = createSignal(0)
 
   return (
     <div style={{ overflow: 'hidden', width: '100vw', height: '100vh' }}>
@@ -115,13 +116,14 @@ function App() {
           value={zoomX()}
           onInput={(e) => setZoomX(+e.currentTarget.value)}
         />
-
         <TopTimeline.Component
           time={time()}
           min={0}
           max={window.innerHeight}
           onTimeChange={setTime}
+          onPan={setPan}
           style={{ height: '50px' }}
+          pan={pan()}
           zoom={{
             x: zoomX(),
           }}
@@ -132,6 +134,11 @@ function App() {
           max={window.innerWidth}
           onTimeChange={setTime}
           style={{ height: '50px' }}
+          onPan={setPan}
+          pan={pan()}
+          zoom={{
+            x: zoomX(),
+          }}
         />
       </div>
     </div>

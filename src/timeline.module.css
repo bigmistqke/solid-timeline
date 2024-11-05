@@ -3,6 +3,10 @@
   stroke: var(--color-path-stroke, black);
 }
 
+.presence {
+  pointer-events: none;
+}
+
 .timeIndicator {
   & line {
     stroke: var(--color-indicator-line-stroke, black);
@@ -23,5 +27,12 @@
   &.handleContainer.active .handle {
     fill: var(--color-handle-fill-active, white);
     stroke: var(--color-handle-fill-active, black);
+  }
+}
+
+.controlContainer {
+  & line {
+    stroke: var(--color-control-line-stroke, black);
+    pointer-events: none;
   }
 }

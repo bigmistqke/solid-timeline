@@ -20,6 +20,7 @@ import { addVector, divideVector, subtractVector } from './lib/vector'
 import styles from './timeline.module.css'
 import type { Anchor, Anchors, Segment, Vector } from './types'
 import { createIndexMemo } from './utils/create-index-memo'
+import { createWritable } from './utils/create-writable'
 import { whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
 
@@ -91,7 +92,7 @@ function Control(props: {
   const { project } = useTimeline()
   const [, rest] = splitProps(props, ['control', 'position'])
   return (
-    <>
+    <g class={styles.controlContainer}>
       <line
         stroke="black"
         x1={project(props.position, 'x')}
@@ -101,7 +102,7 @@ function Control(props: {
         style={{ 'pointer-events': 'none' }}
       />
       <Handle position={props.control} {...rest} />
-    </>
+    </g>
   )
 }
 
@@ -150,11 +151,15 @@ function Anchor(props: {
 /*                                                                                */
 /**********************************************************************************/
 
-function TimeIndicator(props: { height: number; time: number }) {
+function TimeIndicator(props: {
+  height: number
+  time: number
+  class?: string
+}) {
   const { project, getValue } = useTimeline()
 
   return (
-    <g class={styles.timeIndicator}>
+    <g class={clsx(styles.timeIndicator, props.class)}>
       <line
         y1={0}
         y2={props.height}
@@ -208,18 +213,19 @@ function Timeline(
     max: number
     min: number
     setAnchors: SetStoreFunction<Array<Anchor>>
-    onOriginChange?(origin: Vector): void
+    onPan?(pan: number): void
     onTimeChange?(time: number): void
     onZoomChange?(zoom: Vector): void
     time?: number
     zoom?: Partial<Vector>
+    pan?: number
   }
 ) {
   const [, rest] = splitProps(props, [
     'min',
     'max',
     'onZoomChange',
-    'onOriginChange',
+    'onPan',
     'absoluteAnchors',
     'd',
     'zoom',
@@ -246,8 +252,10 @@ function Timeline(
     { x: 1, y: 1 }
   )
 
+  const [pan, setPan] = createWritable(() => props.pan || 0)
+
   const origin = createMemo(() => ({
-    x: 0,
+    x: pan(),
     y: (paddingMin() - props.min) / (props.zoom?.y || 1),
   }))
 
@@ -258,7 +266,7 @@ function Timeline(
 
   function unproject(point: Vector | number, type: 'x' | 'y') {
     const value = typeof point === 'object' ? point[type] : point
-    return (value - origin()[type]) / zoom()[type]
+    return (value + origin()[type]) / zoom()[type]
   }
 
   function getPairedAnchorPosition(
@@ -443,13 +451,27 @@ function Timeline(
 
           updatePadding()
           createEffect(() => props.onZoomChange?.(zoom()))
-          createEffect(() => props.onOriginChange?.(origin()))
+          createEffect(() => props.onPan?.(pan()))
         }}
         width="100%"
         height="100%"
+        class={clsx(props.class, styles.timeline)}
         {...rest}
+        onPointerDown={async (event) => {
+          if (event.target !== event.currentTarget) {
+            console.log(event.target)
+            return
+          }
+          if (event.metaKey) {
+            const x = pan()
+            await pointerHelper(event, ({ delta, event }) => {
+              setPan(x - delta.x / zoom().x)
+              setPresence(event.layerX / zoom().x - pan())
+            })
+          }
+        }}
         onPointerMove={(e) => {
-          setPresence(unproject(e.clientX, 'x'))
+          setPresence(e.layerX / zoom().x - pan())
         }}
         onPointerLeave={() => {
           setPresence(undefined)
@@ -466,7 +488,11 @@ function Timeline(
         />
         <Show when={!draggingHandle() && presence()}>
           {(presence) => (
-            <TimeIndicator height={window.innerHeight} time={presence()} />
+            <TimeIndicator
+              height={window.innerHeight}
+              time={presence()}
+              class={styles.presence}
+            />
           )}
         </Show>
         <Show when={props.time}>
@@ -494,20 +520,6 @@ function Timeline(
             )
           }}
         </Index>
-        <line
-          x1={0}
-          x2={domRect()?.width}
-          y1={project(props.max, 'y') - 1}
-          y2={project(props.max, 'y') - 1}
-          stroke="lightgrey"
-        />
-        <line
-          x1={0}
-          x2={domRect()?.width}
-          y1={project(props.min, 'y') + 1}
-          y2={project(props.min, 'y') + 1}
-          stroke="lightgrey"
-        />
         {props.children}
       </svg>
     </TimelineContext.Provider>
