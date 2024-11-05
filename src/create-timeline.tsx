@@ -21,7 +21,7 @@ import styles from './timeline.module.css'
 import type { Anchor, Anchors, Segment, Vector } from './types'
 import { createIndexMemo } from './utils/create-index-memo'
 import { createWritable } from './utils/create-writable'
-import { whenMemo } from './utils/once-every-when'
+import { once, whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
 
 /**********************************************************************************/
@@ -403,10 +403,10 @@ function Timeline(
   }
 
   function maxPaddingFromVector(value: Vector) {
-    return Math.max(value.y, props.max) - props.max
+    return Math.max(value.y, props.max) - props.max + 100
   }
   function minPaddingFromVector(value: Vector) {
-    return props.min - Math.min(value.y, props.min)
+    return props.min - Math.min(value.y, props.min) + 100
   }
 
   function updatePadding() {
@@ -477,8 +477,10 @@ function Timeline(
           setPresence(undefined)
         }}
         onDblClick={() => {
-          const time = presence()
-          if (time) props.addAnchor(time)
+          once(presence, props.addAnchor)
+        }}
+        onWheel={(e) => {
+          setPan((pan) => pan + e.deltaX)
         }}
       >
         <path
@@ -592,11 +594,24 @@ export function createTimeline(config?: { initial?: Anchors }) {
         let index = anchors.findIndex(([anchor]) => {
           return anchor.x > time
         })
-        if (index === -1) return
-        anchors.splice(index, 0, [
-          { x: time, y: value },
-          { pre: { x: 0.5, y: 0 }, post: { x: 0.5, y: 0 } },
-        ])
+        if (index === -1) {
+          anchors[anchors.length - 1][1] = {
+            ...anchors[anchors.length - 1][1],
+            post: { x: 0.5, y: 0 },
+          }
+          anchors.push([{ x: time, y: value }, { pre: { x: 0.5, y: 0 } }])
+        } else if (index === 0) {
+          anchors[0][1] = {
+            ...anchors[0][1],
+            pre: { x: 0.5, y: 0 },
+          }
+          anchors.unshift([{ x: time, y: value }, { post: { x: 0.5, y: 0 } }])
+        } else {
+          anchors.splice(index, 0, [
+            { x: time, y: value },
+            { pre: { x: 0.5, y: 0 }, post: { x: 0.5, y: 0 } },
+          ])
+        }
       })
     )
   }
