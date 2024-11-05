@@ -1,3 +1,4 @@
+import { createClock } from '#/create-clock'
 import { createTimeline } from '#/create-timeline'
 import { Sheet } from '#/sheet'
 import { createSignal, onCleanup } from 'solid-js'
@@ -18,8 +19,13 @@ function Circle(props: { top: number; left: number }) {
 }
 
 function App() {
-  const [time, setTime] = createSignal(performance.now())
   const [domRect, setDomRect] = createSignal<DOMRect>()
+  const [time, clock] = createClock({
+    get max() {
+      return domRect()?.width
+    },
+    speed: 0.1,
+  })
 
   const TopTimeline = createTimeline({
     initial: [
@@ -87,11 +93,7 @@ function App() {
     observer.observe(element)
     updateDomRect()
 
-    function loop() {
-      requestAnimationFrame(loop)
-      setTime((performance.now() / 10) % (domRect()?.width || 1000))
-    }
-    loop()
+    clock.start()
 
     onCleanup(() => observer.disconnect())
   }
@@ -102,34 +104,36 @@ function App() {
         left={LeftTimeline.getValue(time())}
         top={TopTimeline.getValue(time())}
       />
-      <div
+      <Sheet
+        time={time()}
         style={{
           display: 'flex',
           'flex-direction': 'column',
         }}
         ref={onRef}
       >
-        <Sheet time={time()}>
+        <div style={{ display: 'flex', 'flex-direction': 'row' }}>
           <TopTimeline.Value>
-            <TopTimeline.Value.Input decimals={2} />
-            <TopTimeline.Value.Button>add</TopTimeline.Value.Button>
+            <TopTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
+            <TopTimeline.Value.Button>+</TopTimeline.Value.Button>
           </TopTimeline.Value>
           <LeftTimeline.Value>
-            <LeftTimeline.Value.Input decimals={2} />
-            <LeftTimeline.Value.Button>add</LeftTimeline.Value.Button>
+            <LeftTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
+            <LeftTimeline.Value.Button>+</LeftTimeline.Value.Button>
           </LeftTimeline.Value>
-          <TopTimeline.Component
-            min={0}
-            max={window.innerHeight}
-            style={{ height: '50px' }}
-          />
-          <LeftTimeline.Component
-            min={0}
-            max={window.innerWidth}
-            style={{ height: '50px' }}
-          />
-        </Sheet>
-      </div>
+        </div>
+
+        <TopTimeline.Component
+          min={0}
+          max={window.innerHeight}
+          style={{ height: '50px' }}
+        />
+        <LeftTimeline.Component
+          min={0}
+          max={window.innerWidth}
+          style={{ height: '50px' }}
+        />
+      </Sheet>
     </div>
   )
 }
