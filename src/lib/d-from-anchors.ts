@@ -20,7 +20,9 @@ export function dFromAbsoluteAnchors(
 
   let currentCommand = ''
 
-  absoluteAnchors.forEach(([point, { pre, post } = {}], index) => {
+  absoluteAnchors.forEach((anchor, index) => {
+    const [point, { pre, post } = {}] = anchor
+
     let next = absoluteAnchors[index + 1]
 
     let segment = ''

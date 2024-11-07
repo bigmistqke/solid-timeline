@@ -6,7 +6,7 @@ import {
   Vector,
 } from '#/types'
 
-const isPrePoint = (point: Anchor): point is PrePoint => !!point[1]?.pre
+const isPrePoint = (anchor: Anchor): anchor is PrePoint => !!anchor[1]?.pre
 const isPostPoint = (point: Anchor): point is PostPoint => !!point[1]?.post
 
 export function createLookupMap(start: Anchor, end: Anchor, amount = 30) {

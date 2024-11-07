@@ -1,12 +1,13 @@
+import { Accessor, createMemo, mapArray } from 'solid-js'
 import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import { createTimelineComponent } from './create-timeline-component'
 import { createValueComponent } from './create-value-component'
-import { createLookupMap } from './lib/create-cubic-lookup-map'
+import { createLookupMap } from './lib/create-lookup-map'
 import { dFromAbsoluteAnchors } from './lib/d-from-anchors'
 import { getValueFromSegments } from './lib/get-value-from-segments'
 import { addVector, multiplyVector } from './lib/vector'
 import type { Anchor, Anchors, Segment, Vector } from './types'
-import { createIndexProxy } from './utils/create-index-array'
+import { createArrayProxy } from './utils/create-array-proxy'
 
 /**********************************************************************************/
 /*                                                                                */
@@ -31,25 +32,32 @@ export type Api = {
 export function createTimeline(config?: { initial?: Anchors }) {
   const [anchors, setAnchors] = createStore<Anchors>(config?.initial || [])
 
-  const absoluteAnchors = createIndexProxy(
-    () => anchors,
-    ([position, relativeControls]) => {
-      const controls: { pre?: Vector; post?: Vector } = {
-        pre: undefined,
-        post: undefined,
-      }
-      const pre = relativeControls?.pre
-      if (pre) {
-        controls.pre = addVector(position, multiplyVector(pre, { x: -1 }))
-      }
+  const absoluteAnchors = createArrayProxy(
+    mapArray(
+      () => anchors,
+      (anchor): Anchor => {
+        const pre = createMemo(() =>
+          anchor[1]?.pre
+            ? addVector(anchor[0], multiplyVector(anchor[1].pre, { x: -1 }))
+            : undefined
+        )
+        const post = createMemo(() =>
+          anchor[1]?.post ? addVector(anchor[0], anchor[1].post) : undefined
+        )
 
-      const post = relativeControls?.post
-      if (post) {
-        controls.post = addVector(position, post)
+        return [
+          anchor[0],
+          {
+            get pre() {
+              return pre()
+            },
+            get post() {
+              return post()
+            },
+          },
+        ]
       }
-
-      return [position, controls] as Anchor
-    }
+    )
   )
 
   function getPairedAnchorPosition(
@@ -59,10 +67,10 @@ export function createTimeline(config?: { initial?: Anchors }) {
     if (type === 'pre' && index === 0) {
       return undefined
     }
-    if (type === 'post' && index === absoluteAnchors.length - 1) {
+    if (type === 'post' && index === anchors.length - 1) {
       return undefined
     }
-    return absoluteAnchors[type === 'pre' ? index - 1 : index + 1][0]
+    return anchors[type === 'pre' ? index - 1 : index + 1][0]
   }
 
   function clampControl(
@@ -89,7 +97,7 @@ export function createTimeline(config?: { initial?: Anchors }) {
     const clampedX = Math.max(min.x, Math.min(max.x, control.x))
 
     if (clampedX === control.x) {
-      return { ...control }
+      return control
     } else {
       const ratio = (position.x - clampedX) / (position.x - control.x)
       const clampedY = (control.y - position.y) * ratio + position.y
@@ -100,48 +108,49 @@ export function createTimeline(config?: { initial?: Anchors }) {
     }
   }
 
-  const clampedAbsoluteAnchors = createIndexProxy(
-    // TODO:  Unsure why i have to spread it.
-    //        Without it sporadically the following error gets thrown in indexArray: "`signal[i]()` is not a function"
-    () => [...absoluteAnchors],
-    (anchor, index) => {
-      const [position, controls] = anchor
-
-      if (!controls) {
-        return anchor
+  const clampedAbsoluteAnchors = createArrayProxy(
+    mapArray(
+      () => absoluteAnchors,
+      (anchor, index): Anchor => {
+        const pre = createMemo(() => clampControl('pre', index(), anchor))
+        const post = createMemo(() => clampControl('post', index(), anchor))
+        return [
+          anchor[0],
+          {
+            get pre() {
+              return pre()
+            },
+            get post() {
+              return post()
+            },
+          },
+        ]
       }
-
-      return [
-        position,
-        {
-          pre: clampControl('pre', index, anchor),
-          post: clampControl('post', index, anchor),
-        },
-      ] as Anchor
-    }
+    )
   )
 
-  const lookupMapSegments = createIndexProxy(
-    // TODO:  Unsure why i have to spread it.
-    //        Without it sporadically the following error gets thrown in indexArray: "`signal[i]()` is not a function"
-    () => [...clampedAbsoluteAnchors],
-    (position, index) => {
-      const next = clampedAbsoluteAnchors[index + 1]
-      return next
-        ? {
-            range: [position[0].x, next[0].x],
-            map: createLookupMap(position, next),
-          }
-        : undefined
-    }
+  const mapArraySegments = mapArray(
+    () => clampedAbsoluteAnchors,
+    (anchor, index) =>
+      createMemo(() => {
+        const next = clampedAbsoluteAnchors[index() + 1]
+        return next
+          ? {
+              range: [anchor[0].x, next[0].x],
+              map: createLookupMap(anchor, next),
+            }
+          : undefined
+      })
   )
+
+  const lookupMapSegments = createMemo(() => mapArraySegments().slice(0, -1))
 
   function d(config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }) {
     return dFromAbsoluteAnchors(clampedAbsoluteAnchors, config)
   }
 
   function getValue(time: number) {
-    const segments = lookupMapSegments.slice(0, -1) as Array<Segment>
+    const segments = lookupMapSegments() as Array<Accessor<Segment>>
     return getValueFromSegments(segments, time)
   }
 

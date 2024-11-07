@@ -46,32 +46,32 @@ function App() {
     ],
   })
 
-  /* const LeftTimeline = createTimeline({
+  const LeftTimeline = createTimeline({
     initial: [
       [{ x: 0, y: 0 }],
       [{ x: 300, y: 750 }],
       [
         { x: 600, y: 0 },
         {
-          pre: { x: 0.5, y: 0 },
+          pre: { x: 100, y: 0 },
         },
       ],
       [
         { x: 900, y: 500 },
         {
-          pre: { x: 0.5, y: 0 },
-          post: { x: 0.5, y: 0 },
+          pre: { x: 100, y: 0 },
+          post: { x: 100, y: 0 },
         },
       ],
       [{ x: 1200, y: 100 }],
       [
         { x: 1500, y: 750 },
         {
-          pre: { x: 0.5, y: 0 },
+          pre: { x: 100, y: 0 },
         },
       ],
     ],
-  }) */
+  })
 
   function onRef(element: HTMLDivElement) {
     function updateDomRect() {
@@ -90,8 +90,7 @@ function App() {
     <div style={{ overflow: 'hidden', width: '100vw', height: '100vh' }}>
       <Circle
         top={TopTimeline.getValue(time())}
-        left={0}
-        // top={TopTimeline.getValue(time())}
+        left={LeftTimeline.getValue(time())}
       />
       <Sheet
         time={time()}
@@ -106,10 +105,10 @@ function App() {
             <TopTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
             <TopTimeline.Value.Button>+</TopTimeline.Value.Button>
           </TopTimeline.Value>
-          {/* <LeftTimeline.Value>
+          <LeftTimeline.Value>
             <LeftTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
             <LeftTimeline.Value.Button>+</LeftTimeline.Value.Button>
-          </LeftTimeline.Value> */}
+          </LeftTimeline.Value>
         </div>
 
         <TopTimeline.Component
@@ -117,11 +116,11 @@ function App() {
           max={window.innerHeight}
           style={{ height: '50px' }}
         />
-        {/* <LeftTimeline.Component
+        <LeftTimeline.Component
           min={0}
           max={window.innerWidth}
           style={{ height: '50px' }}
-        /> */}
+        />
       </Sheet>
     </div>
   )
