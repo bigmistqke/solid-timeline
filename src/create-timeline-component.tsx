@@ -167,6 +167,7 @@ export function createTimelineComponent({
   absoluteAnchors,
   setAnchors,
   deleteAnchor,
+  getPairedAnchorPosition,
 }: Api) {
   function Indicator(props: {
     height: number
@@ -252,19 +253,6 @@ export function createTimelineComponent({
       return (value + origin[type]) / zoom()[type]
     }
 
-    function getPairedAnchorPosition(
-      type: 'pre' | 'post',
-      index: number
-    ): undefined | Vector {
-      if (type === 'pre' && index === 0) {
-        return undefined
-      }
-      if (type === 'post' && index === absoluteAnchors().length - 1) {
-        return undefined
-      }
-      return absoluteAnchors()[type === 'pre' ? index - 1 : index + 1][0]
-    }
-
     /**
      * `absoluteToRelativeControl` applies 3 operations on the given absolute control-vector:
      * - Clamps absolute x-value to ensure monotonicity of the curve
@@ -280,33 +268,22 @@ export function createTimelineComponent({
       index: number
       absoluteControl: Vector
     }) {
-      const [position] = absoluteAnchors()[index]
-      const pairedPosition = getPairedAnchorPosition(type, index)
-
-      if (!pairedPosition) {
-        throw `Attempting to process a control without a paired anchor.`
-      }
-
-      const [min, max] =
-        type === 'post'
-          ? [position, pairedPosition]
-          : [pairedPosition, position]
-
-      // Clamp x to ensure monotonicity of the curve (https://en.wikipedia.org/wiki/Monotonic_function)
-      const x = Math.max(min.x, Math.min(max.x, absoluteControl.x))
-
+      const [position] = absoluteAnchors[index]
       return {
         // Absolute value to absolute offset from position
         y: Math.floor(absoluteControl.y - position.y),
         // Absolute value to relative range [0-1]
-        x: Math.abs(position.x - x) / Math.abs(position.x - pairedPosition.x),
+        x:
+          type === 'pre'
+            ? Math.floor(position.x - absoluteControl.x)
+            : Math.floor(absoluteControl.x - position.x),
       }
     }
 
     async function onControlDragStart({
       type,
       event,
-      anchor: [position, controls],
+      anchor: [, controls],
       index,
     }: {
       type: 'pre' | 'post'
@@ -315,19 +292,7 @@ export function createTimelineComponent({
       index: number
     }) {
       const initialControl = { ...controls![type]! }
-
-      const prePosition = getPairedAnchorPosition('pre', index)
-      const postPosition = getPairedAnchorPosition('post', index)
-      const preRange = prePosition && subtractVector(position, prePosition)
-      const postRange = postPosition && subtractVector(position, postPosition)
-
       const pairedType = type === 'pre' ? 'post' : 'pre'
-      const ratio =
-        preRange && postRange
-          ? type === 'pre'
-            ? postRange.x / preRange.x
-            : preRange.x / postRange.x
-          : undefined
 
       await pointerHelper(event, ({ delta, event }) => {
         delta = divideVector(delta, zoom())
@@ -341,10 +306,10 @@ export function createTimelineComponent({
         setAnchors(index, 1, type, control)
 
         // Symmetric dragging of paired control
-        if (event.metaKey && ratio) {
+        if (event.metaKey) {
           setAnchors(index, 1, pairedType, {
             x: control.x,
-            y: control.y * ratio,
+            y: control.y * -1,
           })
         }
       })
@@ -397,9 +362,9 @@ export function createTimelineComponent({
     function updatePadding() {
       let min = 0
       let max = 0
-      absoluteAnchors().forEach(([anchor, { pre, post } = {}]) => {
-        min = Math.max(min, minPaddingFromVector(anchor))
-        max = Math.max(max, maxPaddingFromVector(anchor))
+      absoluteAnchors.forEach(([position, { pre, post } = {}]) => {
+        min = Math.max(min, minPaddingFromVector(position))
+        max = Math.max(max, maxPaddingFromVector(position))
         if (pre) {
           min = Math.max(min, minPaddingFromVector(pre))
           max = Math.max(max, maxPaddingFromVector(pre))
@@ -443,7 +408,6 @@ export function createTimelineComponent({
           {...rest}
           onPointerDown={async (event) => {
             if (event.target !== event.currentTarget) {
-              console.log(event.target)
               return
             }
             if (event.metaKey) {
@@ -482,10 +446,11 @@ export function createTimelineComponent({
             )}
           </Show>
           <Indicator height={window.innerHeight} time={time()} />
-          <Index each={absoluteAnchors()}>
+          <Index each={absoluteAnchors}>
             {(anchor, index) => {
               const position = () => anchor()[0]
               const control = (type: 'pre' | 'post') => anchor()[1]?.[type]
+
               return (
                 <Anchor
                   position={position()}
@@ -493,10 +458,19 @@ export function createTimelineComponent({
                   post={control('post')}
                   onDeleteAnchor={() => deleteAnchor(index)}
                   onControlDragStart={(type, event) =>
-                    onControlDragStart({ type, event, index, anchor: anchor() })
+                    onControlDragStart({
+                      type,
+                      event,
+                      index,
+                      anchor: anchor(),
+                    })
                   }
                   onPositionDragStart={(event) =>
-                    onPositionDragStart({ event, index, anchor: anchor() })
+                    onPositionDragStart({
+                      event,
+                      index,
+                      anchor: anchor(),
+                    })
                   }
                 />
               )

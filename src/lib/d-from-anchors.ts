@@ -20,8 +20,8 @@ export function dFromAbsoluteAnchors(
 
   let currentCommand = ''
 
-  absoluteAnchors.forEach(([point, { pre, post } = {}], index, array) => {
-    let next = array[index + 1]
+  absoluteAnchors.forEach(([point, { pre, post } = {}], index) => {
+    let next = absoluteAnchors[index + 1]
 
     let segment = ''
     if (pre) {
@@ -40,7 +40,7 @@ export function dFromAbsoluteAnchors(
     segment += (point.y + origin.y) * zoom.y
     segment += ' '
 
-    if (index !== array.length - 1) {
+    if (next) {
       let command =
         !next![1]?.pre && !post ? 'L' : next![1]?.pre && post ? 'C' : 'Q'
 
