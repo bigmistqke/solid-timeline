@@ -17,6 +17,7 @@ import { createArrayProxy } from './utils/create-array-proxy'
 
 export type Api = {
   absoluteAnchors: Array<Anchor>
+  clampedAnchors: Array<Anchor>
   anchors: Array<Anchor>
   d(config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }): string
   getValue(time: number): number
@@ -246,6 +247,7 @@ export function createTimeline(config?: { initial?: Anchors }) {
 
   const api: Api = {
     absoluteAnchors,
+    clampedAnchors,
     anchors,
     addAnchor,
     d,

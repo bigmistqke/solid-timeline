@@ -31,8 +31,16 @@
 }
 
 .controlContainer {
-  & line {
-    stroke: var(--color-control-line-stroke, black);
+  & .clamped {
+    stroke: var(--color-control-line-clamped-stroke, black);
+    pointer-events: none;
+  }
+  & .unclamped {
+    stroke: var(--color-control-line-unclamped-stroke, black);
+    stroke-dasharray: var(
+      --color-control-line-unclamped-stroke-dasharray,
+      2px 2px
+    );
     pointer-events: none;
   }
 }

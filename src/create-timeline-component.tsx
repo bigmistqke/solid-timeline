@@ -103,6 +103,7 @@ function Handle(props: {
 function Control(props: {
   position: Vector
   control: Vector
+  clampedControl: Vector
   onDragStart(event: MouseEvent): Promise<void>
 }) {
   const { project } = useTimeline()
@@ -110,9 +111,19 @@ function Control(props: {
   return (
     <g class={styles.controlContainer}>
       <line
+        class={styles.clamped}
         stroke="black"
         x1={project(props.position, 'x')}
         y1={project(props.position, 'y')}
+        x2={project(props.clampedControl, 'x')}
+        y2={project(props.clampedControl, 'y')}
+        style={{ 'pointer-events': 'none' }}
+      />
+      <line
+        class={styles.unclamped}
+        stroke="lightgrey"
+        x1={project(props.clampedControl, 'x')}
+        y1={project(props.clampedControl, 'y')}
         x2={project(props.control, 'x')}
         y2={project(props.control, 'y')}
         style={{ 'pointer-events': 'none' }}
@@ -134,7 +145,9 @@ function Anchor(props: {
   onPositionDragStart(event: MouseEvent): Promise<void>
   position: Vector
   post?: Vector
+  clampedPost?: Vector
   pre?: Vector
+  clampedPre?: Vector
 }) {
   return (
     <>
@@ -142,6 +155,7 @@ function Anchor(props: {
         <Control
           position={props.position}
           control={props.pre!}
+          clampedControl={props.clampedPre!}
           onDragStart={(event) => props.onControlDragStart('pre', event)}
         />
       </Show>
@@ -149,6 +163,7 @@ function Anchor(props: {
         <Control
           position={props.position}
           control={props.post!}
+          clampedControl={props.clampedPost!}
           onDragStart={(event) => props.onControlDragStart('post', event)}
         />
       </Show>
@@ -162,13 +177,14 @@ function Anchor(props: {
 }
 
 export function createTimelineComponent({
-  getValue,
-  addAnchor,
-  d,
   absoluteAnchors,
-  setAnchors,
+  addAnchor,
+  clampedAnchors,
+  d,
   deleteAnchor,
   getPairedAnchorPosition,
+  getValue,
+  setAnchors,
 }: Api) {
   function Indicator(props: {
     height: number
@@ -496,6 +512,8 @@ export function createTimelineComponent({
                   position={position}
                   pre={controls?.pre}
                   post={controls?.post}
+                  clampedPre={clampedAnchors[index()][1]?.pre}
+                  clampedPost={clampedAnchors[index()][1]?.post}
                   onDeleteAnchor={() => deleteAnchor(index())}
                   onControlDragStart={(type, event) =>
                     onControlDragStart({
