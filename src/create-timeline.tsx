@@ -60,6 +60,45 @@ export function createTimeline(config?: { initial?: Anchors }) {
     )
   )
 
+  const clampedAnchors = createArrayProxy(
+    mapArray(
+      () => absoluteAnchors,
+      (anchor, index): Anchor => {
+        const pre = createMemo(() => clampControl('pre', index(), anchor))
+        const post = createMemo(() => clampControl('post', index(), anchor))
+        return [
+          anchor[0],
+          {
+            get pre() {
+              return pre()
+            },
+            get post() {
+              return post()
+            },
+          },
+        ]
+      }
+    )
+  )
+
+  const mapArraySegments = mapArray(
+    () => clampedAnchors,
+    (anchor, index) =>
+      createMemo(() => {
+        const next = clampedAnchors[index() + 1]
+        return next
+          ? {
+              range: [anchor[0].x, next[0].x],
+              map: createLookupMap(anchor, next),
+            }
+          : undefined
+      })
+  )
+
+  const segments = createMemo(
+    () => mapArraySegments().slice(0, -1) as Array<Accessor<Segment>>
+  )
+
   function getPairedAnchorPosition(
     type: 'pre' | 'post',
     index: number
@@ -108,50 +147,12 @@ export function createTimeline(config?: { initial?: Anchors }) {
     }
   }
 
-  const clampedAbsoluteAnchors = createArrayProxy(
-    mapArray(
-      () => absoluteAnchors,
-      (anchor, index): Anchor => {
-        const pre = createMemo(() => clampControl('pre', index(), anchor))
-        const post = createMemo(() => clampControl('post', index(), anchor))
-        return [
-          anchor[0],
-          {
-            get pre() {
-              return pre()
-            },
-            get post() {
-              return post()
-            },
-          },
-        ]
-      }
-    )
-  )
-
-  const mapArraySegments = mapArray(
-    () => clampedAbsoluteAnchors,
-    (anchor, index) =>
-      createMemo(() => {
-        const next = clampedAbsoluteAnchors[index() + 1]
-        return next
-          ? {
-              range: [anchor[0].x, next[0].x],
-              map: createLookupMap(anchor, next),
-            }
-          : undefined
-      })
-  )
-
-  const lookupMapSegments = createMemo(() => mapArraySegments().slice(0, -1))
-
   function d(config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }) {
-    return dFromAbsoluteAnchors(clampedAbsoluteAnchors, config)
+    return dFromAbsoluteAnchors(clampedAnchors, config)
   }
 
   function getValue(time: number) {
-    const segments = lookupMapSegments() as Array<Accessor<Segment>>
-    return getValueFromSegments(segments, time)
+    return getValueFromSegments(segments(), time)
   }
 
   function addAnchor(time: number, value = getValue(time)) {
@@ -160,22 +161,80 @@ export function createTimeline(config?: { initial?: Anchors }) {
         let index = anchors.findIndex(([anchor]) => {
           return anchor.x > time
         })
+
+        // Last element
         if (index === -1) {
-          anchors[anchors.length - 1][1] = {
-            ...anchors[anchors.length - 1][1],
-            post: { x: 100, y: 0 },
+          const [lastPosition, lastControl] = anchors[anchors.length - 1]
+          const maxX = Math.min((time - lastPosition.x) / 2, 100)
+
+          if (lastControl?.pre) {
+            const scale =
+              lastControl.pre.x > maxX ? maxX / lastControl.pre.x : 1
+
+            anchors[anchors.length - 1][1] = {
+              ...lastControl,
+              post: {
+                x: lastControl.pre.x * scale,
+                y: lastControl.pre.y * scale * -1,
+              },
+            }
+          } else {
+            anchors[anchors.length - 1][1] = {
+              post: { x: maxX, y: 0 },
+            }
           }
-          anchors.push([{ x: time, y: value }, { pre: { x: 100, y: 0 } }])
+
+          anchors.push([{ x: time, y: value }, { pre: { x: maxX, y: 0 } }])
         } else if (index === 0) {
-          anchors[0][1] = {
-            ...anchors[0][1],
-            pre: { x: 100, y: 0 },
+          const [firstPosition, firstControl] = anchors[anchors.length - 1]
+          const maxX = Math.min((time - firstPosition.x) / 2, 100)
+
+          if (firstControl?.post) {
+            const scale =
+              firstControl.post.x > maxX ? maxX / firstControl.post.x : 1
+
+            anchors[anchors.length - 1][1] = {
+              ...firstControl,
+              post: {
+                x: firstControl.post.x * scale,
+                y: firstControl.post.y * scale * -1,
+              },
+            }
+          } else {
+            anchors[anchors.length - 1][1] = {
+              post: { x: maxX, y: 0 },
+            }
           }
-          anchors.unshift([{ x: time, y: value }, { post: { x: 100, y: 0 } }])
+          anchors.unshift([{ x: time, y: value }, { post: { x: maxX, y: 0 } }])
         } else {
+          const [prePosition, preControl] = anchors[index - 1]
+          const [postPosition, postControl] = anchors[index]
+
+          const maxX = Math.min(
+            (time - prePosition.x) / 2,
+            (postPosition.x - time) / 2,
+            100
+          )
+
+          if (preControl?.post?.x && maxX < preControl.post.x) {
+            const scale = maxX / preControl.post.x
+            preControl.post = {
+              x: maxX,
+              y: preControl.post.y * scale,
+            }
+          }
+
+          if (postControl?.pre?.x && maxX < postControl.pre.x) {
+            const scale = maxX / postControl.pre.x
+            postControl.pre = {
+              x: maxX,
+              y: postControl.pre.y * scale,
+            }
+          }
+
           anchors.splice(index, 0, [
             { x: time, y: value },
-            { pre: { x: 100, y: 0 }, post: { x: 100, y: 0 } },
+            { pre: { x: maxX, y: 0 }, post: { x: maxX, y: 0 } },
           ])
         }
       })

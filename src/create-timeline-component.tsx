@@ -4,8 +4,9 @@ import {
   ComponentProps,
   createContext,
   createEffect,
+  createMemo,
   createSignal,
-  Index,
+  For,
   onCleanup,
   Show,
   splitProps,
@@ -16,7 +17,7 @@ import { divideVector, subtractVector } from './lib/vector'
 import { useSheet } from './sheet'
 import styles from './timeline.module.css'
 import { Anchor as AnchorType, Vector } from './types'
-import { once, whenMemo } from './utils/once-every-when'
+import { when, whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
 
 /**********************************************************************************/
@@ -172,6 +173,7 @@ export function createTimelineComponent({
   function Indicator(props: {
     height: number
     time: number
+    value?: number
     class?: string
     onPointerDown?: (event: MouseEvent) => void
   }) {
@@ -190,7 +192,7 @@ export function createTimelineComponent({
         />
         <circle
           cx={project(props.time, 'x')}
-          cy={project(getValue(props.time), 'y')!}
+          cy={project(props.value || getValue(props.time), 'y')!}
           r={3}
         />
       </g>
@@ -207,7 +209,7 @@ export function createTimelineComponent({
       zoomY?: number
     }
   ) {
-    const { isDraggingHandle, setPan, zoomX, time, pan } = useSheet()
+    const { isDraggingHandle, setPan, zoomX, time, pan, modifiers } = useSheet()
     const [config, rest] = splitProps(props, [
       'max',
       'min',
@@ -220,7 +222,19 @@ export function createTimelineComponent({
     const [domRect, setDomRect] = createSignal<DOMRect>()
     const [paddingMax, setPaddingMax] = createSignal(0)
     const [paddingMin, setPaddingMin] = createSignal(0)
-    const [presence, setPresence] = createSignal<number | undefined>(undefined)
+
+    const [cursor, setCursor] = createSignal<
+      { x: number; y?: number } | undefined
+    >(undefined)
+    const presence = createMemo(
+      when(cursor, (cursor) => ({
+        x: cursor.x,
+        y:
+          modifiers.meta || isOutOfBounds(cursor.x)
+            ? cursor.y
+            : getValue(cursor.x),
+      }))
+    )
 
     const zoom = whenMemo(
       domRect,
@@ -250,7 +264,12 @@ export function createTimelineComponent({
 
     function unproject(point: Vector | number, type: 'x' | 'y') {
       const value = typeof point === 'object' ? point[type] : point
-      return (value + origin[type]) / zoom()[type]
+
+      if (type === 'x') {
+        return value / zoom().x - pan()
+      } else {
+        return value / zoom().y - paddingMin() - paddingMax()
+      }
     }
 
     /**
@@ -294,7 +313,7 @@ export function createTimelineComponent({
       const initialControl = { ...controls![type]! }
       const pairedType = type === 'pre' ? 'post' : 'pre'
 
-      await pointerHelper(event, ({ delta, event }) => {
+      await pointerHelper(event, ({ delta }) => {
         delta = divideVector(delta, zoom())
 
         const absoluteControl = subtractVector(initialControl, delta)
@@ -306,7 +325,12 @@ export function createTimelineComponent({
         setAnchors(index, 1, type, control)
 
         // Symmetric dragging of paired control
-        if (event.metaKey) {
+        if (
+          modifiers.meta &&
+          index !== absoluteAnchors.length - 1 &&
+          index !== 0
+        ) {
+          console.log(index, absoluteAnchors.length)
           setAnchors(index, 1, pairedType, {
             x: control.x,
             y: control.y * -1,
@@ -379,6 +403,13 @@ export function createTimelineComponent({
       setPaddingMax(max)
     }
 
+    const isOutOfBounds = (x: number) => {
+      const [firstPosition] = absoluteAnchors[0]
+      const [lastPosition] = absoluteAnchors[absoluteAnchors.length - 1]
+      const presenceX = unproject(x, 'x')
+      return presenceX < firstPosition.x || presenceX > lastPosition.x
+    }
+
     return (
       <TimelineContext.Provider
         value={{
@@ -410,22 +441,32 @@ export function createTimelineComponent({
             if (event.target !== event.currentTarget) {
               return
             }
-            if (event.metaKey) {
+            if (modifiers.shift) {
               const x = pan()
               await pointerHelper(event, ({ delta, event }) => {
                 setPan(x - delta.x / zoom().x)
-                setPresence(event.layerX / zoom().x - pan())
+                setCursor((presence) => ({
+                  ...presence!,
+                  x: unproject(event.layerX, 'x'),
+                }))
               })
             }
           }}
           onPointerMove={(e) => {
-            setPresence(e.layerX / zoom().x - pan())
+            setCursor({
+              x: unproject(e.layerX, 'x'),
+              y: unproject(e.layerY, 'y'),
+            })
           }}
           onPointerLeave={() => {
-            setPresence(undefined)
+            setCursor(undefined)
           }}
           onDblClick={() => {
-            once(presence, addAnchor)
+            const anchor = presence()
+            if (anchor) {
+              addAnchor(anchor.x, anchor.y)
+              updatePadding()
+            }
           }}
           onWheel={(e) => {
             setPan((pan) => pan + e.deltaX)
@@ -440,42 +481,41 @@ export function createTimelineComponent({
             {(presence) => (
               <Indicator
                 height={window.innerHeight}
-                time={presence()}
+                time={presence().x}
+                value={presence().y}
                 class={styles.presence}
               />
             )}
           </Show>
           <Indicator height={window.innerHeight} time={time()} />
-          <Index each={absoluteAnchors}>
+          <For each={absoluteAnchors}>
             {(anchor, index) => {
-              const position = () => anchor()[0]
-              const control = (type: 'pre' | 'post') => anchor()[1]?.[type]
-
+              const [position, controls] = anchor
               return (
                 <Anchor
-                  position={position()}
-                  pre={control('pre')}
-                  post={control('post')}
-                  onDeleteAnchor={() => deleteAnchor(index)}
+                  position={position}
+                  pre={controls?.pre}
+                  post={controls?.post}
+                  onDeleteAnchor={() => deleteAnchor(index())}
                   onControlDragStart={(type, event) =>
                     onControlDragStart({
                       type,
                       event,
-                      index,
-                      anchor: anchor(),
+                      index: index(),
+                      anchor,
                     })
                   }
                   onPositionDragStart={(event) =>
                     onPositionDragStart({
                       event,
-                      index,
-                      anchor: anchor(),
+                      index: index(),
+                      anchor,
                     })
                   }
                 />
               )
             }}
-          </Index>
+          </For>
           {props.children}
         </svg>
       </TimelineContext.Provider>

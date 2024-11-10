@@ -4,10 +4,13 @@ import {
   createContext,
   createSignal,
   mergeProps,
+  onCleanup,
+  onMount,
   Setter,
   splitProps,
   useContext,
 } from 'solid-js'
+import { createStore } from 'solid-js/store'
 import { createWritable } from './utils/create-writable'
 
 const SheetContext = createContext<{
@@ -19,6 +22,11 @@ const SheetContext = createContext<{
   setTime: Setter<number>
   isDraggingHandle: Accessor<boolean>
   setIsDraggingHandle: Setter<boolean>
+  modifiers: {
+    meta: boolean
+    shift: boolean
+    alt: boolean
+  }
 }>()
 
 export function useSheet() {
@@ -42,6 +50,38 @@ export function Sheet(
   const [zoomX, setZoomX] = createWritable(() => config.zoom)
   const [time, setTime] = createWritable(() => config.time)
   const [isDraggingHandle, setIsDraggingHandle] = createSignal(false)
+  const [modifiers, setModifiers] = createStore({
+    meta: false,
+    shift: false,
+    alt: false,
+  })
+
+  onMount(() => {
+    const abortController = new AbortController()
+    window.addEventListener(
+      'keydown',
+      (event) => {
+        setModifiers({
+          meta: event.metaKey,
+          shift: event.shiftKey,
+          alt: event.altKey,
+        })
+      },
+      { signal: abortController.signal }
+    )
+    window.addEventListener(
+      'keyup',
+      (event) => {
+        setModifiers({
+          meta: event.metaKey,
+          shift: event.shiftKey,
+          alt: event.altKey,
+        })
+      },
+      { signal: abortController.signal }
+    )
+    onCleanup(() => abortController.abort())
+  })
 
   return (
     <div {...rest}>
@@ -55,6 +95,7 @@ export function Sheet(
           setTime,
           isDraggingHandle,
           setIsDraggingHandle,
+          modifiers,
         }}
       >
         {props.children}
