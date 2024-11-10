@@ -222,7 +222,6 @@ export function createTimelineComponent({
       onPan?(pan: number): void
       onTimeChange?(time: number): void
       onZoomChange?(zoom: Vector): void
-      zoomY?: number
     }
   ) {
     const sheet = useSheet()
@@ -232,7 +231,8 @@ export function createTimelineComponent({
       'onPan',
       'onTimeChange',
       'onZoomChange',
-      'zoomY',
+      'class',
+      'children',
     ])
 
     const [domRect, setDomRect] = createSignal<DOMRect>()
@@ -257,9 +257,8 @@ export function createTimelineComponent({
       (domRect) => ({
         x: sheet.zoomX(),
         y:
-          (domRect.height /
-            (props.max + paddingMax() + paddingMin() - props.min * 2)) *
-          (config.zoomY || 1),
+          domRect.height /
+          (config.max + paddingMax() + paddingMin() - config.min),
       }),
       { x: 1, y: 1 }
     )
@@ -269,22 +268,46 @@ export function createTimelineComponent({
         return sheet.pan()
       },
       get y() {
-        return (paddingMin() - props.min) / (config.zoomY || 1)
+        return paddingMin() - config.min
       },
     }
 
-    function project(point: Vector | number, type: 'x' | 'y') {
-      const value = typeof point === 'object' ? point[type] : point
-      return (value + origin[type]) * zoom()[type]
+    function project(point: Vector | number): Vector
+    function project(point: Vector | number, axis: 'x' | 'y'): number
+    function project(
+      point: Vector | number,
+      axis?: 'x' | 'y'
+    ): Vector | number {
+      if (!axis) {
+        return {
+          x: project(point, 'x'),
+          y: project(point, 'y'),
+        }
+      }
+
+      const value = typeof point === 'object' ? point[axis] : point
+      return (value + origin[axis]) * zoom()[axis]
     }
 
-    function unproject(point: Vector | number, type: 'x' | 'y') {
-      const value = typeof point === 'object' ? point[type] : point
+    function unproject(point: Vector): Vector
+    function unproject(point: Vector | number, axis: 'x' | 'y'): number
+    function unproject(
+      point: Vector | number,
+      axis?: 'x' | 'y'
+    ): Vector | number {
+      if (!axis) {
+        return {
+          x: unproject(point, 'x'),
+          y: unproject(point, 'y'),
+        }
+      }
 
-      if (type === 'x') {
-        return value / zoom().x - sheet.pan()
+      const value = typeof point === 'object' ? point[axis] : point
+
+      if (axis === 'x') {
+        return value / zoom().x - origin.x
       } else {
-        return value / zoom().y - paddingMin() - paddingMax()
+        return value / zoom().y - origin.y
       }
     }
 
@@ -393,10 +416,10 @@ export function createTimelineComponent({
     }
 
     function maxPaddingFromVector(value: Vector) {
-      return Math.max(value.y, props.max) - props.max + 100
+      return Math.max(value.y, config.max) - config.max
     }
     function minPaddingFromVector(value: Vector) {
-      return props.min - Math.min(value.y, props.min) + 100
+      return config.min - Math.min(value.y, config.min)
     }
 
     function updatePadding() {
@@ -446,12 +469,12 @@ export function createTimelineComponent({
             onCleanup(() => observer.disconnect())
 
             updatePadding()
-            createEffect(() => props.onZoomChange?.(zoom()))
-            createEffect(() => props.onPan?.(sheet.pan()))
+            createEffect(() => config.onZoomChange?.(zoom()))
+            createEffect(() => config.onPan?.(sheet.pan()))
           }}
           width="100%"
           height="100%"
-          class={clsx(props.class, styles.timeline)}
+          class={clsx(config.class, styles.timeline)}
           {...rest}
           onPointerDown={async (event) => {
             if (event.target !== event.currentTarget) {
@@ -463,16 +486,18 @@ export function createTimelineComponent({
                 sheet.setPan(x - delta.x / zoom().x)
                 setCursor((presence) => ({
                   ...presence!,
-                  x: unproject(event.layerX, 'x'),
+                  x: unproject(event.offsetX, 'x'),
                 }))
               })
             }
           }}
           onPointerMove={(e) => {
-            setCursor({
-              x: unproject(e.layerX, 'x'),
-              y: unproject(e.layerY, 'y'),
-            })
+            setCursor(
+              unproject({
+                x: e.offsetX,
+                y: e.offsetY,
+              })
+            )
           }}
           onPointerLeave={() => {
             setCursor(undefined)
@@ -534,7 +559,7 @@ export function createTimelineComponent({
               )
             }}
           </For>
-          {props.children}
+          {config.children}
         </svg>
       </TimelineContext.Provider>
     )
