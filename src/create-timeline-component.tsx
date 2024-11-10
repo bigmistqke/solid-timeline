@@ -20,6 +20,8 @@ import { Anchor as AnchorType, Vector } from './types'
 import { when, whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
 
+const PADDING = 10
+
 /**********************************************************************************/
 /*                                                                                */
 /*                                  Use Timeline                                  */
@@ -71,7 +73,7 @@ function Handle(props: {
     <g class={clsx(styles.handleContainer, active() && styles.active)}>
       <circle
         cx={timeline.project(props.position, 'x')}
-        cy={timeline.project(props.position, 'y')}
+        cy={timeline.project(props.position, 'y') + PADDING}
         fill="transparent"
         onDblClick={(e) => {
           if (props.onDblClick) {
@@ -86,7 +88,7 @@ function Handle(props: {
       <circle
         class={styles.handle}
         cx={timeline.project(props.position, 'x')}
-        cy={timeline.project(props.position, 'y')}
+        cy={timeline.project(props.position, 'y') + PADDING}
         r="3"
         style={{ 'pointer-events': 'none' }}
       />
@@ -114,18 +116,18 @@ function Control(props: {
         class={styles.clamped}
         stroke="black"
         x1={timeline.project(props.position, 'x')}
-        y1={timeline.project(props.position, 'y')}
+        y1={timeline.project(props.position, 'y') + PADDING}
         x2={timeline.project(props.clampedControl, 'x')}
-        y2={timeline.project(props.clampedControl, 'y')}
+        y2={timeline.project(props.clampedControl, 'y') + PADDING}
         style={{ 'pointer-events': 'none' }}
       />
       <line
         class={styles.unclamped}
         stroke="lightgrey"
         x1={timeline.project(props.clampedControl, 'x')}
-        y1={timeline.project(props.clampedControl, 'y')}
+        y1={timeline.project(props.clampedControl, 'y') + PADDING}
         x2={timeline.project(props.control, 'x')}
-        y2={timeline.project(props.control, 'y')}
+        y2={timeline.project(props.control, 'y') + PADDING}
         style={{ 'pointer-events': 'none' }}
       />
       <Handle position={props.control} {...rest} />
@@ -208,7 +210,10 @@ export function createTimelineComponent({
         />
         <circle
           cx={timeline.project(props.time, 'x')}
-          cy={timeline.project(props.value || getValue(props.time), 'y')!}
+          cy={
+            timeline.project(props.value || getValue(props.time), 'y')! +
+            PADDING
+          }
           r={3}
         />
       </g>
@@ -257,8 +262,8 @@ export function createTimelineComponent({
       (domRect) => ({
         x: sheet.zoomX(),
         y:
-          domRect.height /
-          (config.max + paddingMax() + paddingMin() - config.min),
+          (domRect.height - PADDING * 2) /
+          (config.max - config.min + paddingMax() + paddingMin()),
       }),
       { x: 1, y: 1 }
     )
@@ -495,7 +500,7 @@ export function createTimelineComponent({
             setCursor(
               unproject({
                 x: e.offsetX,
-                y: e.offsetY,
+                y: e.offsetY - PADDING,
               })
             )
           }}
@@ -515,7 +520,7 @@ export function createTimelineComponent({
         >
           <path
             class={styles.path}
-            d={d({ zoom: zoom(), origin: origin })}
+            d={d({ zoom: zoom(), origin: origin, offset: { y: PADDING } })}
             style={{ 'pointer-events': 'none' }}
           />
           <Show when={!sheet.isDraggingHandle() && presence()}>

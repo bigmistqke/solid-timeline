@@ -3,7 +3,7 @@ import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import { createTimelineComponent } from './create-timeline-component'
 import { createValueComponent } from './create-value-component'
 import { createLookupMap } from './lib/create-lookup-map'
-import { dFromAbsoluteAnchors } from './lib/d-from-anchors'
+import { DConfig, dFromAbsoluteAnchors } from './lib/d-from-anchors'
 import { getValueFromSegments } from './lib/get-value-from-segments'
 import { addVector, multiplyVector } from './lib/vector'
 import type { Anchor, Anchors, Segment, Vector } from './types'
@@ -19,7 +19,7 @@ export type Api = {
   absoluteAnchors: Array<Anchor>
   clampedAnchors: Array<Anchor>
   anchors: Array<Anchor>
-  d(config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }): string
+  d(config?: DConfig): string
   getValue(time: number): number
   setAnchors: SetStoreFunction<Array<Anchor>>
   deleteAnchor(index: number): void
@@ -148,7 +148,7 @@ export function createTimeline(config?: { initial?: Anchors }) {
     }
   }
 
-  function d(config?: { zoom?: Partial<Vector>; origin?: Partial<Vector> }) {
+  function d(config?: DConfig) {
     return dFromAbsoluteAnchors(clampedAnchors, config)
   }
 
