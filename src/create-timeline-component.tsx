@@ -52,26 +52,26 @@ function Handle(props: {
   onDragStart(event: MouseEvent): Promise<void>
   onDblClick?(e: MouseEvent): void
 }) {
-  const { project } = useTimeline()
-  const { setIsDraggingHandle } = useSheet()
+  const timeline = useTimeline()
+  const sheet = useSheet()
 
   const [active, setActive] = createSignal(false)
 
   async function onPointerDown(event: MouseEvent) {
     setActive(true)
-    setIsDraggingHandle(true)
+    sheet.setIsDraggingHandle(true)
 
     await props.onDragStart(event)
 
     setActive(false)
-    setIsDraggingHandle(false)
+    sheet.setIsDraggingHandle(false)
   }
 
   return (
     <g class={clsx(styles.handleContainer, active() && styles.active)}>
       <circle
-        cx={project(props.position, 'x')}
-        cy={project(props.position, 'y')}
+        cx={timeline.project(props.position, 'x')}
+        cy={timeline.project(props.position, 'y')}
         fill="transparent"
         onDblClick={(e) => {
           if (props.onDblClick) {
@@ -85,8 +85,8 @@ function Handle(props: {
       />
       <circle
         class={styles.handle}
-        cx={project(props.position, 'x')}
-        cy={project(props.position, 'y')}
+        cx={timeline.project(props.position, 'x')}
+        cy={timeline.project(props.position, 'y')}
         r="3"
         style={{ 'pointer-events': 'none' }}
       />
@@ -106,26 +106,26 @@ function Control(props: {
   clampedControl: Vector
   onDragStart(event: MouseEvent): Promise<void>
 }) {
-  const { project } = useTimeline()
+  const timeline = useTimeline()
   const [, rest] = splitProps(props, ['control', 'position'])
   return (
     <g class={styles.controlContainer}>
       <line
         class={styles.clamped}
         stroke="black"
-        x1={project(props.position, 'x')}
-        y1={project(props.position, 'y')}
-        x2={project(props.clampedControl, 'x')}
-        y2={project(props.clampedControl, 'y')}
+        x1={timeline.project(props.position, 'x')}
+        y1={timeline.project(props.position, 'y')}
+        x2={timeline.project(props.clampedControl, 'x')}
+        y2={timeline.project(props.clampedControl, 'y')}
         style={{ 'pointer-events': 'none' }}
       />
       <line
         class={styles.unclamped}
         stroke="lightgrey"
-        x1={project(props.clampedControl, 'x')}
-        y1={project(props.clampedControl, 'y')}
-        x2={project(props.control, 'x')}
-        y2={project(props.control, 'y')}
+        x1={timeline.project(props.clampedControl, 'x')}
+        y1={timeline.project(props.clampedControl, 'y')}
+        x2={timeline.project(props.control, 'x')}
+        y2={timeline.project(props.control, 'y')}
         style={{ 'pointer-events': 'none' }}
       />
       <Handle position={props.control} {...rest} />
@@ -193,7 +193,7 @@ export function createTimelineComponent({
     class?: string
     onPointerDown?: (event: MouseEvent) => void
   }) {
-    const { project } = useTimeline()
+    const timeline = useTimeline()
 
     return (
       <g
@@ -203,12 +203,12 @@ export function createTimelineComponent({
         <line
           y1={0}
           y2={props.height}
-          x1={project(props.time, 'x')}
-          x2={project(props.time, 'x')}
+          x1={timeline.project(props.time, 'x')}
+          x2={timeline.project(props.time, 'x')}
         />
         <circle
-          cx={project(props.time, 'x')}
-          cy={project(props.value || getValue(props.time), 'y')!}
+          cx={timeline.project(props.time, 'x')}
+          cy={timeline.project(props.value || getValue(props.time), 'y')!}
           r={3}
         />
       </g>
@@ -225,7 +225,7 @@ export function createTimelineComponent({
       zoomY?: number
     }
   ) {
-    const { isDraggingHandle, setPan, zoomX, time, pan, modifiers } = useSheet()
+    const sheet = useSheet()
     const [config, rest] = splitProps(props, [
       'max',
       'min',
@@ -246,7 +246,7 @@ export function createTimelineComponent({
       when(cursor, (cursor) => ({
         x: cursor.x,
         y:
-          modifiers.meta || isOutOfBounds(cursor.x)
+          sheet.modifiers.meta || isOutOfBounds(cursor.x)
             ? cursor.y
             : getValue(cursor.x),
       }))
@@ -255,7 +255,7 @@ export function createTimelineComponent({
     const zoom = whenMemo(
       domRect,
       (domRect) => ({
-        x: zoomX(),
+        x: sheet.zoomX(),
         y:
           (domRect.height /
             (props.max + paddingMax() + paddingMin() - props.min * 2)) *
@@ -266,7 +266,7 @@ export function createTimelineComponent({
 
     const origin = {
       get x() {
-        return pan()
+        return sheet.pan()
       },
       get y() {
         return (paddingMin() - props.min) / (config.zoomY || 1)
@@ -282,7 +282,7 @@ export function createTimelineComponent({
       const value = typeof point === 'object' ? point[type] : point
 
       if (type === 'x') {
-        return value / zoom().x - pan()
+        return value / zoom().x - sheet.pan()
       } else {
         return value / zoom().y - paddingMin() - paddingMax()
       }
@@ -342,7 +342,7 @@ export function createTimelineComponent({
 
         // Symmetric dragging of paired control
         if (
-          modifiers.meta &&
+          sheet.modifiers.meta &&
           index !== absoluteAnchors.length - 1 &&
           index !== 0
         ) {
@@ -447,7 +447,7 @@ export function createTimelineComponent({
 
             updatePadding()
             createEffect(() => props.onZoomChange?.(zoom()))
-            createEffect(() => props.onPan?.(pan()))
+            createEffect(() => props.onPan?.(sheet.pan()))
           }}
           width="100%"
           height="100%"
@@ -457,10 +457,10 @@ export function createTimelineComponent({
             if (event.target !== event.currentTarget) {
               return
             }
-            if (modifiers.shift) {
-              const x = pan()
+            if (sheet.modifiers.shift) {
+              const x = sheet.pan()
               await pointerHelper(event, ({ delta, event }) => {
-                setPan(x - delta.x / zoom().x)
+                sheet.setPan(x - delta.x / zoom().x)
                 setCursor((presence) => ({
                   ...presence!,
                   x: unproject(event.layerX, 'x'),
@@ -485,7 +485,7 @@ export function createTimelineComponent({
             }
           }}
           onWheel={(e) => {
-            setPan((pan) => pan + e.deltaX)
+            sheet.setPan((pan) => pan + e.deltaX)
           }}
         >
           <path
@@ -493,7 +493,7 @@ export function createTimelineComponent({
             d={d({ zoom: zoom(), origin: origin })}
             style={{ 'pointer-events': 'none' }}
           />
-          <Show when={!isDraggingHandle() && presence()}>
+          <Show when={!sheet.isDraggingHandle() && presence()}>
             {(presence) => (
               <Indicator
                 height={window.innerHeight}
@@ -503,7 +503,7 @@ export function createTimelineComponent({
               />
             )}
           </Show>
-          <Indicator height={window.innerHeight} time={time()} />
+          <Indicator height={window.innerHeight} time={sheet.time()} />
           <For each={absoluteAnchors}>
             {(anchor, index) => {
               const [position, controls] = anchor
