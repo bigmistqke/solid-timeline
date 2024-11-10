@@ -1,51 +1,58 @@
 import { Vector } from '#/types'
 
-export const subtractVector = (
-  point1: Vector,
-  point2: Partial<Vector> | number
-) =>
-  typeof point2 === 'number'
+export function subtractVector(
+  vector1: Vector,
+  vector2: Partial<Vector> | number
+) {
+  return typeof vector2 === 'number'
     ? {
-        x: point1.x - point2,
-        y: point1.y - point2,
+        x: vector1.x - vector2,
+        y: vector1.y - vector2,
       }
     : {
-        x: point1.x - (point2.x ?? 0),
-        y: point1.y - (point2.y ?? 0),
+        x: vector1.x - (vector2.x ?? 0),
+        y: vector1.y - (vector2.y ?? 0),
       }
-export const addVector = (point1: Vector, point2: Partial<Vector> | number) =>
-  typeof point2 === 'number'
+}
+export function addVector(vector1: Vector, vector2: Partial<Vector> | number) {
+  return typeof vector2 === 'number'
     ? {
-        x: point1.x + point2,
-        y: point1.y + point2,
+        x: vector1.x + vector2,
+        y: vector1.y + vector2,
       }
     : {
-        x: point1.x + (point2.x ?? 0),
-        y: point1.y + (point2.y ?? 0),
+        x: vector1.x + (vector2.x ?? 0),
+        y: vector1.y + (vector2.y ?? 0),
       }
-export const divideVector = (
-  point1: Vector,
-  point2: Partial<Vector> | number
-) =>
-  typeof point2 === 'number'
+}
+export function divideVector(
+  vector1: Vector,
+  vector2: Partial<Vector> | number
+) {
+  return typeof vector2 === 'number'
     ? {
-        x: point1.x / point2,
-        y: point1.y / point2,
+        x: vector1.x / vector2,
+        y: vector1.y / vector2,
       }
     : {
-        x: point1.x / (point2.x ?? 1),
-        y: point1.y / (point2.y ?? 1),
+        x: vector1.x / (vector2.x ?? 1),
+        y: vector1.y / (vector2.y ?? 1),
       }
-export const multiplyVector = (
-  point1: Vector,
-  point2: Partial<Vector> | number
-) =>
-  typeof point2 === 'number'
+}
+export function multiplyVector(
+  vector1: Vector,
+  vector2: Partial<Vector> | number
+) {
+  return typeof vector2 === 'number'
     ? {
-        x: point1.x * point2,
-        y: point1.y * point2,
+        x: vector1.x * vector2,
+        y: vector1.y * vector2,
       }
     : {
-        x: point1.x * (point2.x ?? 1),
-        y: point1.y * (point2.y ?? 1),
+        x: vector1.x * (vector2.x ?? 1),
+        y: vector1.y * (vector2.y ?? 1),
       }
+}
+export function lengthVector(vector: Vector) {
+  return Math.sqrt(Math.pow(vector.x, 2) + Math.pow(vector.y, 2))
+}

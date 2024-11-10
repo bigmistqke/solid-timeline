@@ -15,16 +15,13 @@ export type Controls<
   ? RequireKeys<Partial<BareControls>, TRequired>
   : Partial<BareControls>
 
-export type PostPoint = [Vector, Controls<'pre'>]
-export type CenterPoint = [Vector, Controls<'pre' | 'post'>]
-export type PrePoint = [Vector, Controls<'pre'>]
-
-export type CubicPoint = PostPoint | CenterPoint | PrePoint
-export type QuadraticBezierPoint = [Vector, Controls]
-export type LinearBezierPoint = [Vector]
+export type CubicAnchor = PostAnchor | CenterAnchor | PreAnchor
+export type QuadraticBezierAnchor = [Vector, Controls]
+export type LinearBezierAnchor = [Vector]
 
 export type Anchor = [Vector, Controls?]
 export type PreAnchor = [Vector, Controls<'pre'>]
+export type CenterAnchor = [Vector, Controls<'pre' | 'post'>]
 export type PostAnchor = [Vector, Controls<'post'>]
 export type Anchors = Array<Anchor>
 
