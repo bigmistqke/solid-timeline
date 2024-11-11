@@ -7,7 +7,7 @@
   pointer-events: none;
 }
 
-.timeIndicator {
+.indicator {
   & line {
     stroke: var(--color-indicator-line-stroke, black);
   }
@@ -17,32 +17,28 @@
   }
 }
 
-.handleContainer {
-  & .handle {
-    fill: var(--color-handle-fill, black);
-    stroke: var(--color-handle-stroke, none);
-  }
-
-  &:hover .handle,
-  &.handleContainer.active .handle {
-    fill: var(--color-handle-fill-active, white);
-    stroke: var(--color-handle-fill-active, black);
-  }
+.handle {
+  fill: var(--color-handle-fill, black);
+  stroke: var(--color-handle-stroke, none);
 }
 
-.controlContainer {
-  & .clamped {
-    stroke: var(--color-control-line-clamped-stroke, black);
-    pointer-events: none;
-  }
-  & .unclamped {
-    stroke: var(--color-control-line-unclamped-stroke, black);
-    stroke-dasharray: var(
-      --color-control-line-unclamped-stroke-dasharray,
-      2px 2px
-    );
-    pointer-events: none;
-  }
+.handleContainer:hover .handle,
+.handleContainer.active .handle {
+  fill: var(--color-handle-fill-active, white);
+  stroke: var(--color-handle-fill-active, black);
+}
+
+.controlClamped {
+  stroke: var(--color-control-line-clamped-stroke, black);
+  pointer-events: none;
+}
+.controlUnclamped {
+  stroke: var(--color-control-line-unclamped-stroke, black);
+  stroke-dasharray: var(
+    --color-control-line-unclamped-stroke-dasharray,
+    2px 2px
+  );
+  pointer-events: none;
 }
 
 .grid {

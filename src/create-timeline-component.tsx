@@ -61,8 +61,8 @@ function Grid(props: { grid: Vector }) {
   return (
     <Show when={timeline.dimensions()}>
       {(dimensions) => (
-        <g class={styles.grid}>
-          <g class={styles.horizontal}>
+        <g data-timeline-grid class={styles.grid}>
+          <g data-timeline-grid-horizontal class={styles.horizontal}>
             <Index
               each={Array.from({
                 length: Math.floor(
@@ -80,7 +80,7 @@ function Grid(props: { grid: Vector }) {
               )}
             </Index>
           </g>
-          <g class={styles.vertical}>
+          <g data-timeline-grid-horizontal class={styles.vertical}>
             <Index
               each={Array.from({
                 length:
@@ -115,6 +115,7 @@ function Handle(props: {
   position: Vector
   onDragStart(event: MouseEvent): Promise<void>
   onDblClick?(e: MouseEvent): void
+  type: string
 }) {
   const timeline = useTimeline()
   const sheet = useSheet()
@@ -132,8 +133,12 @@ function Handle(props: {
   }
 
   return (
-    <g class={clsx(styles.handleContainer, active() && styles.active)}>
+    <g
+      data-timeline-handle={props.type}
+      class={active() ? styles.active : undefined}
+    >
       <circle
+        data-timeline-handle-trigger={props.type}
         cx={timeline.project(props.position, 'x')}
         cy={timeline.project(props.position, 'y')}
         fill="transparent"
@@ -148,6 +153,7 @@ function Handle(props: {
         style={{ cursor: 'move' }}
       />
       <circle
+        data-timeline-handle-visual={props.type}
         class={styles.handle}
         cx={timeline.project(props.position, 'x')}
         cy={timeline.project(props.position, 'y')}
@@ -165,17 +171,19 @@ function Handle(props: {
 /**********************************************************************************/
 
 function Control(props: {
-  position: Vector
-  control: Vector
   clampedControl: Vector
+  control: Vector
   onDragStart(event: MouseEvent): Promise<void>
+  position: Vector
+  type: string
 }) {
   const timeline = useTimeline()
   const [, rest] = splitProps(props, ['control', 'position'])
   return (
-    <g class={styles.controlContainer}>
+    <g data-timeline-control={props.type}>
       <line
-        class={styles.clamped}
+        data-timeline-control-clamped={props.type}
+        class={styles.controlClamped}
         stroke="black"
         x1={timeline.project(props.position, 'x')}
         y1={timeline.project(props.position, 'y')}
@@ -184,7 +192,8 @@ function Control(props: {
         style={{ 'pointer-events': 'none' }}
       />
       <line
-        class={styles.unclamped}
+        data-timeline-control-unclamped={props.type}
+        class={styles.controlUnclamped}
         stroke="lightgrey"
         x1={timeline.project(props.clampedControl, 'x')}
         y1={timeline.project(props.clampedControl, 'y')}
@@ -214,29 +223,32 @@ function Anchor(props: {
   clampedPre?: Vector
 }) {
   return (
-    <>
+    <g data-timeline-anchor>
       <Show when={props.pre}>
         <Control
-          position={props.position}
-          control={props.pre!}
+          type="pre"
           clampedControl={props.clampedPre!}
+          control={props.pre!}
           onDragStart={(event) => props.onControlDragStart('pre', event)}
+          position={props.position}
         />
       </Show>
       <Show when={props.post}>
         <Control
-          position={props.position}
-          control={props.post!}
+          type="post"
           clampedControl={props.clampedPost!}
+          control={props.post!}
           onDragStart={(event) => props.onControlDragStart('post', event)}
+          position={props.position}
         />
       </Show>
       <Handle
+        type="position"
         position={props.position}
         onDragStart={(event) => props.onPositionDragStart(event)}
         onDblClick={props.onDeleteAnchor}
       />
-    </>
+    </g>
   )
 }
 
@@ -269,12 +281,14 @@ export function createTimelineComponent({
     value?: number
     class?: string
     onPointerDown?: (event: MouseEvent) => void
+    type: string
   }) {
     const timeline = useTimeline()
 
     return (
       <g
-        class={clsx(styles.timeIndicator, props.class)}
+        data-timeline-indicator={props.type}
+        class={clsx(styles.indicator, props.class)}
         onPointerDown={props.onPointerDown}
       >
         <line
@@ -502,6 +516,7 @@ export function createTimelineComponent({
           >
             <Show when={config.grid}>{(grid) => <Grid grid={grid()} />}</Show>
             <path
+              data-timeline-path
               class={styles.path}
               d={d({
                 zoom: zoom(),
@@ -516,10 +531,15 @@ export function createTimelineComponent({
                   time={presence().x}
                   value={presence().y}
                   class={styles.presence}
+                  type="cursor"
                 />
               )}
             </Show>
-            <Indicator height={window.innerHeight} time={sheet.time()} />
+            <Indicator
+              height={window.innerHeight}
+              time={sheet.time()}
+              type="time"
+            />
 
             <For each={absoluteAnchors}>
               {(anchor, index) => {
