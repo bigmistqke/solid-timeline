@@ -1,18 +1,18 @@
 import clsx from 'clsx'
 import { getStroke } from 'perfect-freehand'
-import { createMemo, createSignal, onCleanup, splitProps } from 'solid-js'
+import { createMemo, createSignal, onCleanup, Show, splitProps } from 'solid-js'
 import { createTimeline, Sheet, useSheet } from 'solid-timeline'
 import { createClock } from 'solid-timeline/create-clock'
-import {
-  GraphComponents,
-  useGraph,
-} from 'solid-timeline/create-graph-component'
+import { useGraph } from 'solid-timeline/create-graph-component'
+import { GraphComponents } from 'solid-timeline/graph-components'
 import {
   addVector,
+  divideVector,
   lengthVector,
   multiplyVector,
   subtractVector,
 } from 'solid-timeline/lib/vector'
+import { pointerHelper } from 'solid-timeline/utils/pointer-helper'
 import styles from './custom-component.module.css'
 
 const average = (a: number, b: number) => (a + b) / 2
@@ -72,7 +72,7 @@ const components: Partial<GraphComponents> = {
       setActive(true)
       sheet.setIsDraggingHandle(true)
 
-      await props.onDragStart(event)
+      await props.onPointerDown(event)
 
       setActive(false)
       sheet.setIsDraggingHandle(false)
@@ -99,39 +99,84 @@ const components: Partial<GraphComponents> = {
   },
   Control(props) {
     const graph = useGraph()
-    const outline = createMemo(() => {
-      const delta = subtractVector(props.control, props.position)
+    const sheet = useSheet()
 
-      const length = Math.max(15, Math.floor(lengthVector(delta) / 10))
+    const [, rest] = splitProps(props, ['index'])
 
-      const tween = (t: number) =>
-        addVector(props.position, multiplyVector(delta, t))
-
-      const samples = Array.from({ length }, (_, index) =>
-        graph.project(tween(index / length))
-      )
-
-      return getStroke(samples, {
-        simulatePressure: false,
-        thinning: 0.1,
-        start: {
-          taper: true,
-        },
-      })
-    })
-
-    const [, rest] = splitProps(props, ['control', 'position'])
+    const position = () => graph.absoluteAnchors[props.index][0]
+    const control = () => graph.absoluteAnchors[props.index][1][props.type]
 
     return (
-      <g data-timeline-control={props.type}>
-        <path
-          d={getSvgPathFromStroke(outline())}
-          fill="var(--fill)"
-          style={{ 'pointer-events': 'none' }}
-          opacity={0.9}
-        />
-        <graph.Handle {...rest} position={props.control} />
-      </g>
+      <Show when={control()}>
+        {(control) => {
+          const outline = createMemo(() => {
+            const delta = subtractVector(control(), position())
+
+            const length = Math.max(15, Math.floor(lengthVector(delta) / 10))
+
+            const tween = (t: number) =>
+              addVector(position(), multiplyVector(delta, t))
+
+            const samples = Array.from({ length }, (_, index) =>
+              graph.project(tween(index / length))
+            )
+
+            return getStroke(samples, {
+              simulatePressure: false,
+              thinning: 0.1,
+              start: {
+                taper: true,
+              },
+            })
+          })
+
+          async function onPointerDown(event: MouseEvent) {
+            const initialControl = { ...control() }
+
+            const pairedType = props.type === 'pre' ? 'post' : 'pre'
+
+            await pointerHelper(event, ({ delta }) => {
+              delta = divideVector(delta, graph.zoom())
+
+              const control = graph.absoluteToRelativeControl({
+                ...props,
+                absoluteControl: subtractVector(initialControl, delta),
+              })
+              graph.setAnchors(props.index, 1, props.type, control)
+
+              // Symmetric dragging of paired control
+              if (
+                sheet.modifiers.meta &&
+                props.index !== graph.absoluteAnchors.length - 1 &&
+                props.index !== 0
+              ) {
+                graph.setAnchors(props.index, 1, pairedType, {
+                  x: control.x,
+                  y: control.y * -1,
+                })
+              }
+            })
+
+            graph.updatePadding()
+          }
+
+          return (
+            <g data-timeline-control={props.type}>
+              <path
+                d={getSvgPathFromStroke(outline()!)}
+                fill="var(--fill)"
+                style={{ 'pointer-events': 'none' }}
+                opacity={0.9}
+              />
+              <graph.Handle
+                position={control()}
+                onPointerDown={onPointerDown}
+                {...rest}
+              />
+            </g>
+          )
+        }}
+      </Show>
     )
   },
   Path() {
@@ -228,7 +273,12 @@ function App() {
         top={TopTimeline.getValue(time())}
         left={LeftTimeline.getValue(time())}
       />
-      <Sheet time={time()} class={styles.sheet} ref={onRef} {...components}>
+      <Sheet
+        time={time()}
+        class={styles.sheet}
+        ref={onRef}
+        graphComponents={components}
+      >
         <div class={styles.timelineContainer}>
           <TopTimeline.Graph
             min={0}
