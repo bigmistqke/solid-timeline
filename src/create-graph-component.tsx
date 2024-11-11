@@ -196,19 +196,20 @@ export function createGraphComponent(api: Api) {
       setPaddingMax(max)
     }
 
+    function d(config?: DConfig) {
+      return api.d(config ?? { zoom: zoom(), offset: offset() })
+    }
+
     createEffect(() => config.onZoomChange?.(zoom()))
     createEffect(() => config.onPan?.(sheet.pan()))
 
     const graph: GraphContext = mergeProps(sheetGraphComponents, api, {
-      d(config?: DConfig) {
-        return api.d(config ?? { zoom: zoom(), offset: offset() })
-      },
+      d,
       project,
       unproject,
       dimensions,
       zoom,
       offset,
-      getValue: api.getValue,
       updatePadding,
       absoluteToRelativeControl,
       isOutOfBounds,
