@@ -385,7 +385,7 @@ export function createTimelineComponent({
             }}
             width="100%"
             height="100%"
-            class={clsx(config.class, styles.timeline)}
+            class={styles.timeline}
             onPointerDown={async (event) => {
               if (event.target !== event.currentTarget) {
                 return
