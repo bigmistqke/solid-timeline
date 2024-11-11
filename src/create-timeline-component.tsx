@@ -1,6 +1,5 @@
 import clsx from 'clsx'
 import {
-  Accessor,
   ComponentProps,
   createContext,
   createEffect,
@@ -28,10 +27,8 @@ import { pointerHelper } from './utils/pointer-helper'
 /**********************************************************************************/
 
 const TimelineContext = createContext<{
-  origin: Accessor<Vector>
   project(point: Vector | number, type: 'x' | 'y'): number
   unproject(point: Vector | number, type: 'x' | 'y'): number
-  zoom: Accessor<Vector>
 }>()
 
 function useTimeline() {
@@ -266,12 +263,12 @@ export function createTimelineComponent({
       { x: 1, y: 1 }
     )
 
-    const origin = {
+    const offset = {
       get x() {
-        return sheet.pan()
+        return sheet.pan() * zoom().x
       },
       get y() {
-        return paddingMin() - config.min
+        return (paddingMin() - config.min) * zoom().y + config.paddingY
       },
     }
 
@@ -289,8 +286,7 @@ export function createTimelineComponent({
       }
 
       const value = typeof point === 'object' ? point[axis] : point
-      const offset = axis === 'y' ? config.paddingY : 0
-      return (value + origin[axis]) * zoom()[axis] + offset
+      return value * zoom()[axis] + offset[axis]
     }
 
     function unproject(point: Vector): Vector
@@ -307,12 +303,7 @@ export function createTimelineComponent({
       }
 
       const value = typeof point === 'object' ? point[axis] : point
-
-      if (axis === 'x') {
-        return value / zoom().x - origin.x
-      } else {
-        return value / zoom().y - origin.y - config.paddingY
-      }
+      return (value - offset[axis]) / zoom()[axis]
     }
 
     /**
@@ -456,8 +447,6 @@ export function createTimelineComponent({
     return (
       <TimelineContext.Provider
         value={{
-          origin: () => origin,
-          zoom,
           project,
           unproject,
         }}
@@ -521,8 +510,7 @@ export function createTimelineComponent({
             class={styles.path}
             d={d({
               zoom: zoom(),
-              origin: origin,
-              offset: { y: config.paddingY },
+              offset,
             })}
             style={{ 'pointer-events': 'none' }}
           />

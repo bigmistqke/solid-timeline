@@ -2,7 +2,6 @@ import { Anchor, Vector } from '#/types'
 
 export interface DConfig {
   zoom?: Partial<Vector>
-  origin?: Partial<Vector>
   offset?: Partial<Vector>
 }
 
@@ -16,12 +15,6 @@ export function dFromAbsoluteAnchors(
     x: 1,
     y: 1,
     ...config?.zoom,
-  }
-
-  const origin = {
-    x: 0,
-    y: 0,
-    ...config?.origin,
   }
 
   const offset = {
@@ -39,9 +32,9 @@ export function dFromAbsoluteAnchors(
 
     let segment = ''
     if (pre) {
-      segment += (pre.x + origin.x) * zoom.x + offset.x
+      segment += pre.x * zoom.x + offset.x
       segment += ' '
-      segment += (pre.y + origin.y) * zoom.y + offset.y
+      segment += pre.y * zoom.y + offset.y
       segment += ' '
     }
     if (d === '') {
@@ -49,9 +42,9 @@ export function dFromAbsoluteAnchors(
       segment += currentCommand
       segment += ' '
     }
-    segment += (point.x + origin.x) * zoom.x + offset.x
+    segment += point.x * zoom.x + offset.x
     segment += ' '
-    segment += (point.y + origin.y) * zoom.y + offset.y
+    segment += point.y * zoom.y + offset.y
     segment += ' '
 
     if (next) {
@@ -65,9 +58,9 @@ export function dFromAbsoluteAnchors(
       }
 
       if (post) {
-        segment += (post.x + origin.x) * zoom.x + offset.x
+        segment += post.x * zoom.x + offset.x
         segment += ' '
-        segment += (post.y + origin.y) * zoom.y + offset.y
+        segment += post.y * zoom.y + offset.y
         segment += ' '
       }
     }
