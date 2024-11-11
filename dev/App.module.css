@@ -1,4 +1,5 @@
 .app {
+  --background: #00070f;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
@@ -21,7 +22,7 @@
   display: flex;
   flex: 1;
   border-bottom: 1px solid black;
-  background: #ededed;
+  background: var(--background);
   width: 100%;
   overflow: hidden;
   resize: vertical;
@@ -38,4 +39,29 @@
   background: blue;
   width: 100px;
   height: 100px;
+}
+
+[data-timeline-root] {
+  stroke: white;
+}
+
+[data-timeline-grid] {
+  stroke: rgb(75, 75, 75);
+}
+
+[data-timeline-handle]:hover [data-timeline-handle-visual] {
+  fill: white;
+}
+
+[data-timeline-handle-visual] {
+  fill: var(--background);
+  stroke: white;
+}
+
+[data-timeline-control-line-unclamped] {
+  stroke-dasharray: 5px 10px;
+}
+
+[data-timeline-indicator-line] {
+  stroke: lightgrey;
 }
