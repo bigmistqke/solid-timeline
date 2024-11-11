@@ -230,7 +230,6 @@ export function createTimelineComponent({
       'onPan',
       'onTimeChange',
       'onZoomChange',
-      'class',
       'children',
       'paddingY',
     ])
