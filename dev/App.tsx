@@ -1,14 +1,51 @@
-import { createSignal, onCleanup } from 'solid-js'
+import { getStroke } from 'perfect-freehand'
+import { createMemo, createSignal, onCleanup } from 'solid-js'
 import { createTimeline, Sheet } from 'solid-timeline'
 import { createClock } from 'solid-timeline/create-clock'
+import { useGraph } from 'solid-timeline/create-graph-component'
 import styles from './App.module.css'
+
+const average = (a, b) => (a + b) / 2
+
+function getSvgPathFromStroke(points, closed = true) {
+  const len = points.length
+
+  if (len < 4) {
+    return ``
+  }
+
+  let a = points[0]
+  let b = points[1]
+  const c = points[2]
+
+  let result = `M${a[0].toFixed(2)},${a[1].toFixed(2)} Q${b[0].toFixed(
+    2
+  )},${b[1].toFixed(2)} ${average(b[0], c[0]).toFixed(2)},${average(
+    b[1],
+    c[1]
+  ).toFixed(2)} T`
+
+  for (let i = 2, max = len - 1; i < max; i++) {
+    a = points[i]
+    b = points[i + 1]
+    result += `${average(a[0], b[0]).toFixed(2)},${average(a[1], b[1]).toFixed(
+      2
+    )} `
+  }
+
+  if (closed) {
+    result += 'Z'
+  }
+
+  return result
+}
 
 function Circle(props: { top: number; left: number }) {
   return (
     <div
       class={styles.circle}
       style={{
-        transform: `translate(calc(${props.left}px - 50%), calc(${props.top}px - 50%))`,
+        transform: `translate3d(calc(${props.left}px - 50%), calc(${props.top}px - 50%), 0)`,
       }}
     />
   )
@@ -94,7 +131,7 @@ function App() {
             <TopTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
             <TopTimeline.Value.Button>+</TopTimeline.Value.Button>
           </TopTimeline.Value>
-          <TopTimeline.Component
+          <TopTimeline.Graph
             min={0}
             max={window.innerHeight}
             class={styles.timeline}
@@ -106,11 +143,34 @@ function App() {
             <LeftTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
             <LeftTimeline.Value.Button>+</LeftTimeline.Value.Button>
           </LeftTimeline.Value>
-          <LeftTimeline.Component
+          <LeftTimeline.Graph
             min={0}
             max={window.innerWidth}
             class={styles.timeline}
             grid={{ x: 100, y: 500 }}
+            components={{
+              Path() {
+                const graph = useGraph()
+
+                const outline = createMemo(() =>
+                  getStroke(
+                    graph
+                      .segments()
+                      .flatMap((segment) =>
+                        segment().map.map((vector) => graph.project(vector))
+                      )
+                  )
+                )
+
+                return (
+                  <path
+                    d={getSvgPathFromStroke(outline())}
+                    fill="pink"
+                    style={{ 'pointer-events': 'none' }}
+                  />
+                )
+              },
+            }}
           />
         </div>
       </Sheet>
