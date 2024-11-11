@@ -17,10 +17,9 @@ import { divideVector, subtractVector } from './lib/vector'
 import { useSheet } from './sheet'
 import styles from './timeline.module.css'
 import { Anchor as AnchorType, Vector } from './types'
+import { processProps } from './utils/default-props'
 import { when, whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
-
-const PADDING = 10
 
 /**********************************************************************************/
 /*                                                                                */
@@ -30,9 +29,10 @@ const PADDING = 10
 
 const TimelineContext = createContext<{
   origin: Accessor<Vector>
-  zoom: Accessor<Vector>
+  paddingY: Accessor<number>
   project(point: Vector | number, type: 'x' | 'y'): number
   unproject(point: Vector | number, type: 'x' | 'y'): number
+  zoom: Accessor<Vector>
 }>()
 
 function useTimeline() {
@@ -73,7 +73,7 @@ function Handle(props: {
     <g class={clsx(styles.handleContainer, active() && styles.active)}>
       <circle
         cx={timeline.project(props.position, 'x')}
-        cy={timeline.project(props.position, 'y') + PADDING}
+        cy={timeline.project(props.position, 'y') + timeline.paddingY()}
         fill="transparent"
         onDblClick={(e) => {
           if (props.onDblClick) {
@@ -88,7 +88,7 @@ function Handle(props: {
       <circle
         class={styles.handle}
         cx={timeline.project(props.position, 'x')}
-        cy={timeline.project(props.position, 'y') + PADDING}
+        cy={timeline.project(props.position, 'y') + timeline.paddingY()}
         r="3"
         style={{ 'pointer-events': 'none' }}
       />
@@ -116,18 +116,18 @@ function Control(props: {
         class={styles.clamped}
         stroke="black"
         x1={timeline.project(props.position, 'x')}
-        y1={timeline.project(props.position, 'y') + PADDING}
+        y1={timeline.project(props.position, 'y') + timeline.paddingY()}
         x2={timeline.project(props.clampedControl, 'x')}
-        y2={timeline.project(props.clampedControl, 'y') + PADDING}
+        y2={timeline.project(props.clampedControl, 'y') + timeline.paddingY()}
         style={{ 'pointer-events': 'none' }}
       />
       <line
         class={styles.unclamped}
         stroke="lightgrey"
         x1={timeline.project(props.clampedControl, 'x')}
-        y1={timeline.project(props.clampedControl, 'y') + PADDING}
+        y1={timeline.project(props.clampedControl, 'y') + timeline.paddingY()}
         x2={timeline.project(props.control, 'x')}
-        y2={timeline.project(props.control, 'y') + PADDING}
+        y2={timeline.project(props.control, 'y') + timeline.paddingY()}
         style={{ 'pointer-events': 'none' }}
       />
       <Handle position={props.control} {...rest} />
@@ -212,7 +212,7 @@ export function createTimelineComponent({
           cx={timeline.project(props.time, 'x')}
           cy={
             timeline.project(props.value || getValue(props.time), 'y')! +
-            PADDING
+            timeline.paddingY()
           }
           r={3}
         />
@@ -227,10 +227,11 @@ export function createTimelineComponent({
       onPan?(pan: number): void
       onTimeChange?(time: number): void
       onZoomChange?(zoom: Vector): void
+      paddingY?: number
     }
   ) {
     const sheet = useSheet()
-    const [config, rest] = splitProps(props, [
+    const [config, rest] = processProps(props, { paddingY: 10 }, [
       'max',
       'min',
       'onPan',
@@ -238,6 +239,7 @@ export function createTimelineComponent({
       'onZoomChange',
       'class',
       'children',
+      'paddingY',
     ])
 
     const [domRect, setDomRect] = createSignal<DOMRect>()
@@ -262,7 +264,7 @@ export function createTimelineComponent({
       (domRect) => ({
         x: sheet.zoomX(),
         y:
-          (domRect.height - PADDING * 2) /
+          (domRect.height - config.paddingY * 2) /
           (config.max - config.min + paddingMax() + paddingMin()),
       }),
       { x: 1, y: 1 }
@@ -458,6 +460,7 @@ export function createTimelineComponent({
       <TimelineContext.Provider
         value={{
           origin: () => origin,
+          paddingY: () => config.paddingY,
           zoom,
           project,
           unproject,
@@ -500,7 +503,7 @@ export function createTimelineComponent({
             setCursor(
               unproject({
                 x: e.offsetX,
-                y: e.offsetY - PADDING,
+                y: e.offsetY - config.paddingY,
               })
             )
           }}
@@ -520,7 +523,11 @@ export function createTimelineComponent({
         >
           <path
             class={styles.path}
-            d={d({ zoom: zoom(), origin: origin, offset: { y: PADDING } })}
+            d={d({
+              zoom: zoom(),
+              origin: origin,
+              offset: { y: config.paddingY },
+            })}
             style={{ 'pointer-events': 'none' }}
           />
           <Show when={!sheet.isDraggingHandle() && presence()}>
