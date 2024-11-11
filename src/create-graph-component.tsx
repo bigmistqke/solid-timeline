@@ -265,7 +265,7 @@ export interface TimelineProps extends ComponentProps<'div'> {
   }
 }
 
-export function createTimelineComponent({
+export function createGraphComponent({
   absoluteAnchors,
   addAnchor,
   clampedAnchors,
@@ -306,7 +306,7 @@ export function createTimelineComponent({
     )
   }
 
-  return function Timeline(props: TimelineProps) {
+  return function Graph(props: TimelineProps) {
     const sheet = useSheet()
     const [config, rest] = processProps(props, { paddingY: 10 }, [
       'max',
@@ -395,12 +395,6 @@ export function createTimelineComponent({
       return (value - offset()[axis]) / zoom()[axis]
     }
 
-    /**
-     * `absoluteToRelativeControl` applies 3 operations on the given absolute control-vector:
-     * - Clamps absolute x-value to ensure monotonicity of the curve
-     * - Absolute x-value to relative x-value (range 0-1)
-     * - Absolute y-value to relative y-value (offset from position)
-     */
     function absoluteToRelativeControl({
       type,
       index,
@@ -481,16 +475,14 @@ export function createTimelineComponent({
               if (event.target !== event.currentTarget) {
                 return
               }
-              if (sheet.modifiers.shift) {
-                const x = sheet.pan()
-                await pointerHelper(event, ({ delta, event }) => {
-                  sheet.setPan(x - delta.x / zoom().x)
-                  setCursor((presence) => ({
-                    ...presence!,
-                    x: unproject(event.offsetX, 'x'),
-                  }))
-                })
-              }
+              const x = sheet.pan()
+              await pointerHelper(event, ({ delta, event }) => {
+                sheet.setPan(x - delta.x / zoom().x)
+                setCursor((presence) => ({
+                  ...presence!,
+                  x: unproject(event.offsetX, 'x'),
+                }))
+              })
             }}
             onPointerMove={(e) => {
               setCursor(

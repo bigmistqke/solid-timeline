@@ -1,6 +1,6 @@
 import { Accessor, createMemo, mapArray } from 'solid-js'
 import { createStore, produce, SetStoreFunction } from 'solid-js/store'
-import { createTimelineComponent } from './create-timeline-component'
+import { createGraphComponent } from './create-graph-component'
 import { createValueComponent } from './create-value-component'
 import { createLookupMap } from './lib/create-lookup-map'
 import { DConfig, dFromAbsoluteAnchors } from './lib/d-from-anchors'
@@ -262,6 +262,6 @@ export function createTimeline(config?: { initial?: Anchors }) {
   return {
     ...api,
     Value: createValueComponent(api),
-    Component: createTimelineComponent(api),
+    Graph: createGraphComponent(api),
   }
 }
