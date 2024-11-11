@@ -1,4 +1,4 @@
-import { Vector } from '#/types'
+import { Vector } from 'solid-timeline/types'
 
 export function subtractVector(
   vector1: Vector,

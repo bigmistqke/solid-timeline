@@ -4,7 +4,7 @@ import {
   PreAnchor,
   QuadraticBezierAnchor,
   Vector,
-} from '#/types'
+} from 'solid-timeline/types'
 
 const isPreAnchor = (anchor: Anchor): anchor is PreAnchor => !!anchor[1]?.pre
 const isPostAnchor = (point: Anchor): point is PostAnchor => !!point[1]?.post

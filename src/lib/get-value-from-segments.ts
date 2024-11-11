@@ -1,6 +1,6 @@
-import { Segment } from '#/types'
-import { getLastArrayItem } from '#/utils/get-last-array-item'
 import { Accessor } from 'solid-js'
+import { Segment } from 'solid-timeline/types'
+import { getLastArrayItem } from 'solid-timeline/utils/get-last-array-item'
 import { interpolateYAtX } from './interpolate-y-at-x'
 
 function closestPoint(segments: Array<Accessor<Segment>>, time: number) {

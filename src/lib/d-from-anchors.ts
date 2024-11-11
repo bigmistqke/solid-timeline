@@ -1,4 +1,4 @@
-import { Anchor, Vector } from '#/types'
+import { Anchor, Vector } from 'solid-timeline/types'
 
 export interface DConfig {
   zoom?: Partial<Vector>

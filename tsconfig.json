@@ -23,7 +23,8 @@
     "types": ["vite/client"],
 
     "paths": {
-      "#/*": ["./src/*"]
+      "solid-timeline/*": ["./src/*"],
+      "solid-timeline": ["./src/index.ts"]
     }
   },
   "include": ["src", "dev"]

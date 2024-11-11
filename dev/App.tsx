@@ -1,17 +1,13 @@
-import { createClock } from '#/create-clock'
-import { createTimeline } from '#/create-timeline'
-import { Sheet } from '#/sheet'
 import { createSignal, onCleanup } from 'solid-js'
+import { createTimeline, Sheet } from 'solid-timeline'
+import { createClock } from 'solid-timeline/create-clock'
+import styles from './App.module.css'
 
 function Circle(props: { top: number; left: number }) {
   return (
     <div
+      class={styles.circle}
       style={{
-        position: 'fixed',
-        'border-radius': '50%',
-        background: 'blue',
-        height: '100px',
-        width: '100px',
         transform: `translate(calc(${props.left}px - 50%), calc(${props.top}px - 50%))`,
       }}
     />
@@ -87,56 +83,33 @@ function App() {
   }
 
   return (
-    <div style={{ overflow: 'hidden', width: '100vw', height: '100vh' }}>
+    <div class={styles.app}>
       <Circle
         top={TopTimeline.getValue(time())}
         left={LeftTimeline.getValue(time())}
       />
-      <Sheet
-        time={time()}
-        style={{
-          display: 'flex',
-          'flex-direction': 'column',
-        }}
-        ref={onRef}
-      >
-        <TopTimeline.Component
-          min={0}
-          max={window.innerHeight}
-          style={{
-            height: '50px',
-            background: '#ededed',
-            'border-top': '1px solid black',
-            'border-bottom': '1px solid black',
-            resize: 'vertical',
-            overflow: 'hidden',
-          }}
-        />
-        <LeftTimeline.Component
-          min={0}
-          max={window.innerWidth}
-          style={{
-            height: '50px',
-            background: '#ededed',
-            'border-bottom': '1px solid black',
-            resize: 'vertical',
-            overflow: 'hidden',
-          }}
-        />
-        <div
-          style={{
-            display: 'flex',
-            'flex-direction': 'column',
-          }}
-        >
-          <TopTimeline.Value>
+      <Sheet time={time()} class={styles.sheet} ref={onRef}>
+        <div class={styles.timelineContainer}>
+          <TopTimeline.Value class={styles.value}>
             <TopTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
             <TopTimeline.Value.Button>+</TopTimeline.Value.Button>
           </TopTimeline.Value>
-          <LeftTimeline.Value>
+          <TopTimeline.Component
+            min={0}
+            max={window.innerHeight}
+            class={styles.timeline}
+          />
+        </div>
+        <div class={styles.timelineContainer}>
+          <LeftTimeline.Value class={styles.value}>
             <LeftTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
             <LeftTimeline.Value.Button>+</LeftTimeline.Value.Button>
           </LeftTimeline.Value>
+          <LeftTimeline.Component
+            min={0}
+            max={window.innerWidth}
+            class={styles.timeline}
+          />
         </div>
       </Sheet>
     </div>
