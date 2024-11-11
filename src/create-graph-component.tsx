@@ -8,6 +8,7 @@ import {
   createSignal,
   For,
   Index,
+  mergeProps,
   onCleanup,
   Show,
   splitProps,
@@ -36,7 +37,9 @@ export interface GraphComponents {
   Handle: typeof Handle
   Indicator: typeof Indicator
   Path: typeof Path
+  Root: typeof Root
 }
+
 interface GraphContext extends Merge<Api, GraphComponents> {
   project(point: Vector): Vector
   project(point: Vector | number, type: 'x' | 'y'): number
@@ -46,12 +49,20 @@ interface GraphContext extends Merge<Api, GraphComponents> {
   zoom: Accessor<Vector>
   offset: Accessor<Vector>
   getValue(time: number): number
+  updatePadding(): void
+  absoluteToRelativeControl(config: {
+    type: 'pre' | 'post'
+    index: number
+    absoluteControl: Vector
+  }): Vector
+  setDimensions(dimensions: { width: number; height: number }): void
+  isOutOfBounds(x: number): boolean
 }
 
-const GraphContext = createContext<GraphContext>()
+const graphContext = createContext<GraphContext>()
 
 export function useGraph() {
-  const context = useContext(GraphContext)
+  const context = useContext(graphContext)
   if (!context) {
     throw `useGraph should be used in a descendant of Timeline`
   }
@@ -336,11 +347,191 @@ function Path() {
 
 /**********************************************************************************/
 /*                                                                                */
+/*                                     Graph                                      */
+/*                                                                                */
+/**********************************************************************************/
+
+export interface GraphProps extends ComponentProps<'div'> {
+  grid?: Vector
+}
+
+function Root(props: GraphProps) {
+  const sheet = useSheet()
+  const graph = useGraph()
+
+  const [config, rest] = splitProps(props, ['children', 'grid'])
+
+  const [cursor, setCursor] = createSignal<Vector | undefined>(undefined)
+
+  const presence = whenMemo(cursor, (cursor) => {
+    if (sheet.modifiers.meta || graph.isOutOfBounds(cursor.x)) {
+      return cursor
+    }
+    return {
+      x: cursor.x,
+      y: graph.getValue(cursor.x),
+    }
+  })
+
+  return (
+    <div {...rest}>
+      <svg
+        ref={(element) => {
+          function updateDomRect() {
+            graph.setDimensions(element.getBoundingClientRect())
+            graph.updatePadding()
+          }
+          const observer = new ResizeObserver(updateDomRect)
+          observer.observe(element)
+          updateDomRect()
+          onCleanup(() => observer.disconnect())
+
+          graph.updatePadding()
+        }}
+        width="100%"
+        height="100%"
+        class={styles.timeline}
+        onPointerDown={async (event) => {
+          if (event.target !== event.currentTarget) {
+            return
+          }
+          const x = sheet.pan()
+          await pointerHelper(event, ({ delta, event }) => {
+            sheet.setPan(x - delta.x / graph.zoom().x)
+            setCursor((presence) => ({
+              ...presence!,
+              x: graph.unproject(event.offsetX, 'x'),
+            }))
+          })
+        }}
+        onPointerMove={(e) => {
+          setCursor(
+            graph.unproject({
+              x: e.offsetX,
+              y: e.offsetY,
+            })
+          )
+        }}
+        onPointerLeave={() => {
+          setCursor(undefined)
+        }}
+        onDblClick={() => {
+          const anchor = presence()
+          if (anchor) {
+            graph.addAnchor(anchor.x, anchor.y)
+            graph.updatePadding()
+          }
+        }}
+        onWheel={(e) => {
+          sheet.setPan((pan) => pan - e.deltaX)
+        }}
+      >
+        <Show when={config.grid}>{(grid) => <Grid grid={grid()} />}</Show>
+        <graph.Path />
+        <Show when={!sheet.isDraggingHandle() && presence()}>
+          {(presence) => (
+            <graph.Indicator
+              height={window.innerHeight}
+              time={presence().x}
+              value={presence().y}
+              class={styles.presence}
+              type="cursor"
+            />
+          )}
+        </Show>
+        <graph.Indicator
+          height={window.innerHeight}
+          time={sheet.time()}
+          type="time"
+        />
+        <For each={graph.absoluteAnchors}>
+          {(anchor, index) => {
+            const [position, controls] = anchor
+            return (
+              <graph.Anchor
+                position={position}
+                pre={controls?.pre}
+                post={controls?.post}
+                clampedPre={graph.clampedAnchors[index()][1]?.pre}
+                clampedPost={graph.clampedAnchors[index()][1]?.post}
+                onDeleteAnchor={() => graph.deleteAnchor(index())}
+                onControlDragStart={async function (type, event) {
+                  const initialControl = { ...controls![type]! }
+                  const pairedType = type === 'pre' ? 'post' : 'pre'
+
+                  await pointerHelper(event, ({ delta }) => {
+                    delta = divideVector(delta, graph.zoom())
+
+                    const absoluteControl = subtractVector(
+                      initialControl,
+                      delta
+                    )
+                    const control = graph.absoluteToRelativeControl({
+                      index: index(),
+                      type,
+                      absoluteControl,
+                    })
+                    graph.setAnchors(index(), 1, type, control)
+
+                    // Symmetric dragging of paired control
+                    if (
+                      sheet.modifiers.meta &&
+                      index() !== graph.absoluteAnchors.length - 1 &&
+                      index() !== 0
+                    ) {
+                      console.log(index(), graph.absoluteAnchors.length)
+                      graph.setAnchors(index(), 1, pairedType, {
+                        x: control.x,
+                        y: control.y * -1,
+                      })
+                    }
+                  })
+
+                  graph.updatePadding()
+                }}
+                onPositionDragStart={async function (event) {
+                  const initialPosition = { ...anchor[0] }
+
+                  const pre = graph.getPairedAnchorPosition('pre', index())
+                  const post = graph.getPairedAnchorPosition('post', index())
+
+                  await pointerHelper(event, ({ delta }) => {
+                    delta = divideVector(delta, graph.zoom())
+
+                    const position = subtractVector(initialPosition, delta)
+
+                    // Clamp position with the pre-anchor's position
+                    if (pre && position.x - 1 < pre.x) {
+                      position.x = pre.x + 1
+                    }
+
+                    // Clamp position with the pre-anchor's position
+                    if (post && position.x + 1 > post.x) {
+                      position.x = post.x - 1
+                    }
+
+                    graph.setAnchors(index(), 0, position)
+                  })
+
+                  graph.updatePadding()
+                }}
+              />
+            )
+          }}
+        </For>
+        {props.children}
+      </svg>
+    </div>
+  )
+}
+
+/**********************************************************************************/
+/*                                                                                */
 /*                             Create Graph Component                             */
 /*                                                                                */
 /**********************************************************************************/
 
-export interface TimelineProps
+export interface RootProps
   extends Merge<ComponentProps<'div'>, Partial<GraphComponents>> {
   grid?: {
     x: number
@@ -355,9 +546,9 @@ export interface TimelineProps
 }
 
 export function createGraphComponent(api: Api) {
-  return function Graph(props: TimelineProps) {
+  return function Graph(props: RootProps) {
     const sheet = useSheet()
-    const [config, rest] = processProps(
+    const [config, graphComponents, rest] = processProps(
       props,
       {
         paddingY: 10,
@@ -367,6 +558,7 @@ export function createGraphComponent(api: Api) {
         Control,
         Handle,
         Grid,
+        Root,
       },
       [
         'children',
@@ -377,14 +569,8 @@ export function createGraphComponent(api: Api) {
         'onTimeChange',
         'onZoomChange',
         'paddingY',
-        // Components
-        'Anchor',
-        'Control',
-        'Grid',
-        'Handle',
-        'Indicator',
-        'Path',
-      ]
+      ],
+      ['Anchor', 'Control', 'Grid', 'Handle', 'Indicator', 'Path', 'Root']
     )
 
     const [dimensions, setDimensions] = createSignal<{
@@ -409,18 +595,6 @@ export function createGraphComponent(api: Api) {
       x: sheet.pan() * zoom().x,
       y: (paddingMin() - config.min) * zoom().y + config.paddingY,
     }))
-
-    const [cursor, setCursor] = createSignal<Vector | undefined>(undefined)
-
-    const presence = whenMemo(cursor, (cursor) => {
-      if (sheet.modifiers.meta || isOutOfBounds(cursor.x)) {
-        return cursor
-      }
-      return {
-        x: cursor.x,
-        y: api.getValue(cursor.x),
-      }
-    })
 
     function isOutOfBounds(x: number) {
       const [firstPosition] = api.absoluteAnchors[0]
@@ -511,190 +685,35 @@ export function createGraphComponent(api: Api) {
       setPaddingMax(max)
     }
 
+    createEffect(() => config.onZoomChange?.(zoom()))
+    createEffect(() => config.onPan?.(sheet.pan()))
+
+    const graph: GraphContext = mergeProps(
+      api,
+      {
+        d: (config?: DConfig) => {
+          return api.d(config ?? { zoom: zoom(), offset: offset() })
+        },
+        project,
+        unproject,
+        dimensions,
+        zoom,
+        offset,
+        getValue: api.getValue,
+        updatePadding,
+        absoluteToRelativeControl,
+        isOutOfBounds,
+        setDimensions,
+      },
+      graphComponents
+    )
+
     return (
-      <GraphContext.Provider
-        value={{
-          ...api,
-          d: (config?: DConfig) => {
-            return api.d(config ?? { zoom: zoom(), offset: offset() })
-          },
-          project,
-          unproject,
-          dimensions,
-          zoom,
-          offset,
-          getValue: api.getValue,
-          get Path() {
-            return config.Path
-          },
-          get Anchor() {
-            return config.Anchor
-          },
-          get Control() {
-            return config.Control
-          },
-          get Indicator() {
-            return config.Indicator
-          },
-          get Grid() {
-            return config.Grid
-          },
-          get Handle() {
-            return config.Handle
-          },
-        }}
-      >
-        <div {...rest}>
-          <svg
-            ref={(element) => {
-              function updateDomRect() {
-                setDimensions(element.getBoundingClientRect())
-                updatePadding()
-              }
-              const observer = new ResizeObserver(updateDomRect)
-              observer.observe(element)
-              updateDomRect()
-              onCleanup(() => observer.disconnect())
-
-              updatePadding()
-              createEffect(() => config.onZoomChange?.(zoom()))
-              createEffect(() => config.onPan?.(sheet.pan()))
-            }}
-            width="100%"
-            height="100%"
-            class={styles.timeline}
-            onPointerDown={async (event) => {
-              if (event.target !== event.currentTarget) {
-                return
-              }
-              const x = sheet.pan()
-              await pointerHelper(event, ({ delta, event }) => {
-                sheet.setPan(x - delta.x / zoom().x)
-                setCursor((presence) => ({
-                  ...presence!,
-                  x: unproject(event.offsetX, 'x'),
-                }))
-              })
-            }}
-            onPointerMove={(e) => {
-              setCursor(
-                unproject({
-                  x: e.offsetX,
-                  y: e.offsetY,
-                })
-              )
-            }}
-            onPointerLeave={() => {
-              setCursor(undefined)
-            }}
-            onDblClick={() => {
-              const anchor = presence()
-              if (anchor) {
-                api.addAnchor(anchor.x, anchor.y)
-                updatePadding()
-              }
-            }}
-            onWheel={(e) => {
-              sheet.setPan((pan) => pan - e.deltaX)
-            }}
-          >
-            <Show when={config.grid}>{(grid) => <Grid grid={grid()} />}</Show>
-            <config.Path />
-            <Show when={!sheet.isDraggingHandle() && presence()}>
-              {(presence) => (
-                <config.Indicator
-                  height={window.innerHeight}
-                  time={presence().x}
-                  value={presence().y}
-                  class={styles.presence}
-                  type="cursor"
-                />
-              )}
-            </Show>
-            <config.Indicator
-              height={window.innerHeight}
-              time={sheet.time()}
-              type="time"
-            />
-            <For each={api.absoluteAnchors}>
-              {(anchor, index) => {
-                const [position, controls] = anchor
-                return (
-                  <config.Anchor
-                    position={position}
-                    pre={controls?.pre}
-                    post={controls?.post}
-                    clampedPre={api.clampedAnchors[index()][1]?.pre}
-                    clampedPost={api.clampedAnchors[index()][1]?.post}
-                    onDeleteAnchor={() => api.deleteAnchor(index())}
-                    onControlDragStart={async function (type, event) {
-                      const initialControl = { ...controls![type]! }
-                      const pairedType = type === 'pre' ? 'post' : 'pre'
-
-                      await pointerHelper(event, ({ delta }) => {
-                        delta = divideVector(delta, zoom())
-
-                        const absoluteControl = subtractVector(
-                          initialControl,
-                          delta
-                        )
-                        const control = absoluteToRelativeControl({
-                          index: index(),
-                          type,
-                          absoluteControl,
-                        })
-                        api.setAnchors(index(), 1, type, control)
-
-                        // Symmetric dragging of paired control
-                        if (
-                          sheet.modifiers.meta &&
-                          index() !== api.absoluteAnchors.length - 1 &&
-                          index() !== 0
-                        ) {
-                          console.log(index(), api.absoluteAnchors.length)
-                          api.setAnchors(index(), 1, pairedType, {
-                            x: control.x,
-                            y: control.y * -1,
-                          })
-                        }
-                      })
-
-                      updatePadding()
-                    }}
-                    onPositionDragStart={async function (event) {
-                      const initialPosition = { ...anchor[0] }
-
-                      const pre = api.getPairedAnchorPosition('pre', index())
-                      const post = api.getPairedAnchorPosition('post', index())
-
-                      await pointerHelper(event, ({ delta }) => {
-                        delta = divideVector(delta, zoom())
-
-                        const position = subtractVector(initialPosition, delta)
-
-                        // Clamp position with the pre-anchor's position
-                        if (pre && position.x - 1 < pre.x) {
-                          position.x = pre.x + 1
-                        }
-
-                        // Clamp position with the pre-anchor's position
-                        if (post && position.x + 1 > post.x) {
-                          position.x = post.x - 1
-                        }
-
-                        api.setAnchors(index(), 0, position)
-                      })
-
-                      updatePadding()
-                    }}
-                  />
-                )
-              }}
-            </For>
-            {config.children}
-          </svg>
-        </div>
-      </GraphContext.Provider>
+      <graphContext.Provider value={graph}>
+        <graph.Root grid={config.grid} {...rest}>
+          {props.children}
+        </graph.Root>
+      </graphContext.Provider>
     )
   }
 }
