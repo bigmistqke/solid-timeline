@@ -8,20 +8,17 @@ import {
   createSignal,
   For,
   Index,
-  JSXElement,
-  mergeProps,
   onCleanup,
   Show,
   splitProps,
   useContext,
 } from 'solid-js'
-import { Dynamic } from 'solid-js/web'
 import { Api } from './create-timeline'
 import { DConfig } from './lib/d-from-anchors'
 import { divideVector, subtractVector } from './lib/vector'
 import { useSheet } from './sheet'
 import styles from './timeline.module.css'
-import { type Anchor, Vector } from './types'
+import { type Anchor, Merge, Vector } from './types'
 import { processProps } from './utils/default-props'
 import { whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
@@ -32,16 +29,15 @@ import { pointerHelper } from './utils/pointer-helper'
 /*                                                                                */
 /**********************************************************************************/
 
-type GraphComponents = Partial<{
+export interface GraphComponents {
   Anchor: typeof Anchor
   Control: typeof Control
   Grid: typeof Grid
   Handle: typeof Handle
   Indicator: typeof Indicator
-  Path: () => JSXElement
-}>
-
-interface TimelineContext extends Api {
+  Path: typeof Path
+}
+interface GraphContext extends Merge<Api, GraphComponents> {
   project(point: Vector): Vector
   project(point: Vector | number, type: 'x' | 'y'): number
   unproject(point: Vector): Vector
@@ -50,10 +46,9 @@ interface TimelineContext extends Api {
   zoom: Accessor<Vector>
   offset: Accessor<Vector>
   getValue(time: number): number
-  components: GraphComponents
 }
 
-const GraphContext = createContext<TimelineContext>()
+const GraphContext = createContext<GraphContext>()
 
 export function useGraph() {
   const context = useContext(GraphContext)
@@ -69,7 +64,11 @@ export function useGraph() {
 /*                                                                                */
 /**********************************************************************************/
 
-function Grid(props: { grid: Vector }) {
+export interface GridProps {
+  grid: Vector
+}
+
+function Grid(props: GridProps) {
   const graph = useGraph()
 
   const offset = () => ({
@@ -78,55 +77,48 @@ function Grid(props: { grid: Vector }) {
   })
 
   return (
-    <Show
-      when={!graph.components?.Grid}
-      fallback={<Dynamic component={graph.components.Grid} {...props} />}
-    >
-      {
-        <Show when={graph.dimensions()}>
-          {(dimensions) => (
-            <g data-timeline-grid class={styles.grid}>
-              <g data-timeline-grid-horizontal class={styles.horizontal}>
-                <Index
-                  each={Array.from({
-                    length: Math.floor(
-                      dimensions().height / (props.grid.y * graph.zoom().y) + 2
-                    ),
-                  })}
-                >
-                  {(_, y) => (
-                    <line
-                      x1={0}
-                      x2={dimensions().width}
-                      y1={graph.project(y * props.grid.y, 'y') + offset().y}
-                      y2={graph.project(y * props.grid.y, 'y') + offset().y}
-                    />
-                  )}
-                </Index>
-              </g>
-              <g data-timeline-grid-horizontal class={styles.vertical}>
-                <Index
-                  each={Array.from({
-                    length:
-                      Math.floor(
-                        dimensions().width / (props.grid.x * graph.zoom().x)
-                      ) + 2,
-                  })}
-                >
-                  {(_, x) => (
-                    <line
-                      x1={graph.project(x * props.grid.x, 'x') + offset().x}
-                      x2={graph.project(x * props.grid.x, 'x') + offset().x}
-                      y1={0}
-                      y2={dimensions().height}
-                    />
-                  )}
-                </Index>
-              </g>
-            </g>
-          )}
-        </Show>
-      }
+    <Show when={graph.dimensions()}>
+      {(dimensions) => (
+        <g data-timeline-grid class={styles.grid}>
+          <g data-timeline-grid-horizontal class={styles.horizontal}>
+            <Index
+              each={Array.from({
+                length: Math.floor(
+                  dimensions().height / (props.grid.y * graph.zoom().y) + 2
+                ),
+              })}
+            >
+              {(_, y) => (
+                <line
+                  x1={0}
+                  x2={dimensions().width}
+                  y1={graph.project(y * props.grid.y, 'y') + offset().y}
+                  y2={graph.project(y * props.grid.y, 'y') + offset().y}
+                />
+              )}
+            </Index>
+          </g>
+          <g data-timeline-grid-horizontal class={styles.vertical}>
+            <Index
+              each={Array.from({
+                length:
+                  Math.floor(
+                    dimensions().width / (props.grid.x * graph.zoom().x)
+                  ) + 2,
+              })}
+            >
+              {(_, x) => (
+                <line
+                  x1={graph.project(x * props.grid.x, 'x') + offset().x}
+                  x2={graph.project(x * props.grid.x, 'x') + offset().x}
+                  y1={0}
+                  y2={dimensions().height}
+                />
+              )}
+            </Index>
+          </g>
+        </g>
+      )}
     </Show>
   )
 }
@@ -137,12 +129,14 @@ function Grid(props: { grid: Vector }) {
 /*                                                                                */
 /**********************************************************************************/
 
-function Handle(props: {
+export interface HandleProps {
   position: Vector
   onDragStart(event: MouseEvent): Promise<void>
   onDblClick?(e: MouseEvent): void
   type: string
-}) {
+}
+
+function Handle(props: HandleProps) {
   const graph = useGraph()
   const sheet = useSheet()
 
@@ -159,41 +153,34 @@ function Handle(props: {
   }
 
   return (
-    <Show
-      when={!graph.components.Handle}
-      fallback={<Dynamic component={graph.components.Handle} {...props} />}
+    <g
+      data-timeline-handle={props.type}
+      class={active() ? styles.active : undefined}
     >
-      {
-        <g
-          data-timeline-handle={props.type}
-          class={active() ? styles.active : undefined}
-        >
-          <circle
-            data-timeline-handle-trigger={props.type}
-            cx={graph.project(props.position, 'x')}
-            cy={graph.project(props.position, 'y')}
-            fill="transparent"
-            onDblClick={(e) => {
-              if (props.onDblClick) {
-                e.stopPropagation()
-                props.onDblClick(e)
-              }
-            }}
-            onPointerDown={onPointerDown}
-            r="10"
-            style={{ cursor: 'move' }}
-          />
-          <circle
-            data-timeline-handle-visual={props.type}
-            class={styles.handle}
-            cx={graph.project(props.position, 'x')}
-            cy={graph.project(props.position, 'y')}
-            r="3"
-            style={{ 'pointer-events': 'none' }}
-          />
-        </g>
-      }
-    </Show>
+      <circle
+        data-timeline-handle-trigger={props.type}
+        cx={graph.project(props.position, 'x')}
+        cy={graph.project(props.position, 'y')}
+        fill="transparent"
+        onDblClick={(e) => {
+          if (props.onDblClick) {
+            e.stopPropagation()
+            props.onDblClick(e)
+          }
+        }}
+        onPointerDown={onPointerDown}
+        r="10"
+        style={{ cursor: 'move' }}
+      />
+      <circle
+        data-timeline-handle-visual={props.type}
+        class={styles.handle}
+        cx={graph.project(props.position, 'x')}
+        cy={graph.project(props.position, 'y')}
+        r="3"
+        style={{ 'pointer-events': 'none' }}
+      />
+    </g>
   )
 }
 
@@ -203,46 +190,41 @@ function Handle(props: {
 /*                                                                                */
 /**********************************************************************************/
 
-function Control(props: {
+export type ControlProps = {
   clampedControl: Vector
   control: Vector
   onDragStart(event: MouseEvent): Promise<void>
   position: Vector
   type: string
-}) {
+}
+
+function Control(props: ControlProps) {
   const graph = useGraph()
   const [, rest] = splitProps(props, ['control', 'position'])
   return (
-    <Show
-      when={!graph.components.Control}
-      fallback={<Dynamic component={graph.components.Control} {...props} />}
-    >
-      {
-        <g data-timeline-control={props.type}>
-          <line
-            data-timeline-control-clamped={props.type}
-            class={styles.controlClamped}
-            stroke="black"
-            x1={graph.project(props.position, 'x')}
-            y1={graph.project(props.position, 'y')}
-            x2={graph.project(props.clampedControl, 'x')}
-            y2={graph.project(props.clampedControl, 'y')}
-            style={{ 'pointer-events': 'none' }}
-          />
-          <line
-            data-timeline-control-unclamped={props.type}
-            class={styles.controlUnclamped}
-            stroke="lightgrey"
-            x1={graph.project(props.clampedControl, 'x')}
-            y1={graph.project(props.clampedControl, 'y')}
-            x2={graph.project(props.control, 'x')}
-            y2={graph.project(props.control, 'y')}
-            style={{ 'pointer-events': 'none' }}
-          />
-          <Handle position={props.control} {...rest} />
-        </g>
-      }
-    </Show>
+    <g data-timeline-control={props.type}>
+      <line
+        data-timeline-control-clamped={props.type}
+        class={styles.controlClamped}
+        stroke="black"
+        x1={graph.project(props.position, 'x')}
+        y1={graph.project(props.position, 'y')}
+        x2={graph.project(props.clampedControl, 'x')}
+        y2={graph.project(props.clampedControl, 'y')}
+        style={{ 'pointer-events': 'none' }}
+      />
+      <line
+        data-timeline-control-unclamped={props.type}
+        class={styles.controlUnclamped}
+        stroke="lightgrey"
+        x1={graph.project(props.clampedControl, 'x')}
+        y1={graph.project(props.clampedControl, 'y')}
+        x2={graph.project(props.control, 'x')}
+        y2={graph.project(props.control, 'y')}
+        style={{ 'pointer-events': 'none' }}
+      />
+      <graph.Handle position={props.control} {...rest} />
+    </g>
   )
 }
 
@@ -252,7 +234,7 @@ function Control(props: {
 /*                                                                                */
 /**********************************************************************************/
 
-function Anchor(props: {
+export interface AnchorProps {
   onDeleteAnchor(): void
   onControlDragStart(type: 'pre' | 'post', event: MouseEvent): Promise<void>
   onPositionDragStart(event: MouseEvent): Promise<void>
@@ -261,42 +243,37 @@ function Anchor(props: {
   clampedPost?: Vector
   pre?: Vector
   clampedPre?: Vector
-}) {
+}
+
+function Anchor(props: AnchorProps) {
   const graph = useGraph()
   return (
-    <Show
-      when={!graph.components.Anchor}
-      fallback={<Dynamic component={graph.components.Anchor} {...props} />}
-    >
-      {
-        <g data-timeline-anchor>
-          <Show when={props.pre}>
-            <Control
-              type="pre"
-              clampedControl={props.clampedPre!}
-              control={props.pre!}
-              onDragStart={(event) => props.onControlDragStart('pre', event)}
-              position={props.position}
-            />
-          </Show>
-          <Show when={props.post}>
-            <Control
-              type="post"
-              clampedControl={props.clampedPost!}
-              control={props.post!}
-              onDragStart={(event) => props.onControlDragStart('post', event)}
-              position={props.position}
-            />
-          </Show>
-          <Handle
-            type="position"
-            position={props.position}
-            onDragStart={(event) => props.onPositionDragStart(event)}
-            onDblClick={props.onDeleteAnchor}
-          />
-        </g>
-      }
-    </Show>
+    <g data-timeline-anchor>
+      <Show when={props.pre}>
+        <graph.Control
+          type="pre"
+          clampedControl={props.clampedPre!}
+          control={props.pre!}
+          onDragStart={(event) => props.onControlDragStart('pre', event)}
+          position={props.position}
+        />
+      </Show>
+      <Show when={props.post}>
+        <graph.Control
+          type="post"
+          clampedControl={props.clampedPost!}
+          control={props.post!}
+          onDragStart={(event) => props.onControlDragStart('post', event)}
+          position={props.position}
+        />
+      </Show>
+      <graph.Handle
+        type="position"
+        position={props.position}
+        onDragStart={(event) => props.onPositionDragStart(event)}
+        onDblClick={props.onDeleteAnchor}
+      />
+    </g>
   )
 }
 
@@ -306,14 +283,16 @@ function Anchor(props: {
 /*                                                                                */
 /**********************************************************************************/
 
-function Indicator(props: {
+export interface Indicator {
   height: number
   time: number
   value?: number
   class?: string
   onPointerDown?: (event: MouseEvent) => void
   type: string
-}) {
+}
+
+function Indicator(props: Indicator) {
   const graph = useGraph()
 
   return (
@@ -346,19 +325,12 @@ function Indicator(props: {
 function Path() {
   const graph = useGraph()
   return (
-    <Show
-      when={!graph.components.Path}
-      fallback={<Dynamic component={graph.components.Path} />}
-    >
-      {
-        <path
-          data-timeline-path
-          class={styles.path}
-          d={graph.d()}
-          style={{ 'pointer-events': 'none' }}
-        />
-      }
-    </Show>
+    <path
+      data-timeline-path
+      class={styles.path}
+      d={graph.d()}
+      style={{ 'pointer-events': 'none' }}
+    />
   )
 }
 
@@ -368,33 +340,52 @@ function Path() {
 /*                                                                                */
 /**********************************************************************************/
 
-export interface TimelineProps extends ComponentProps<'div'> {
+export interface TimelineProps
+  extends Merge<ComponentProps<'div'>, Partial<GraphComponents>> {
+  grid?: {
+    x: number
+    y: number
+  }
   max: number
   min: number
   onPan?(pan: number): void
   onTimeChange?(time: number): void
   onZoomChange?(zoom: Vector): void
   paddingY?: number
-  grid?: {
-    x: number
-    y: number
-  }
-  components?: GraphComponents
 }
 
 export function createGraphComponent(api: Api) {
   return function Graph(props: TimelineProps) {
     const sheet = useSheet()
-    const [config, rest] = processProps(props, { paddingY: 10 }, [
-      'max',
-      'min',
-      'onPan',
-      'onTimeChange',
-      'onZoomChange',
-      'children',
-      'paddingY',
-      'grid',
-    ])
+    const [config, rest] = processProps(
+      props,
+      {
+        paddingY: 10,
+        Path,
+        Anchor,
+        Indicator,
+        Control,
+        Handle,
+        Grid,
+      },
+      [
+        'children',
+        'grid',
+        'max',
+        'min',
+        'onPan',
+        'onTimeChange',
+        'onZoomChange',
+        'paddingY',
+        // Components
+        'Anchor',
+        'Control',
+        'Grid',
+        'Handle',
+        'Indicator',
+        'Path',
+      ]
+    )
 
     const [dimensions, setDimensions] = createSignal<{
       width: number
@@ -533,7 +524,24 @@ export function createGraphComponent(api: Api) {
           zoom,
           offset,
           getValue: api.getValue,
-          components: mergeProps(() => props.components || {}),
+          get Path() {
+            return config.Path
+          },
+          get Anchor() {
+            return config.Anchor
+          },
+          get Control() {
+            return config.Control
+          },
+          get Indicator() {
+            return config.Indicator
+          },
+          get Grid() {
+            return config.Grid
+          },
+          get Handle() {
+            return config.Handle
+          },
         }}
       >
         <div {...rest}>
@@ -591,10 +599,10 @@ export function createGraphComponent(api: Api) {
             }}
           >
             <Show when={config.grid}>{(grid) => <Grid grid={grid()} />}</Show>
-            <Path />
+            <config.Path />
             <Show when={!sheet.isDraggingHandle() && presence()}>
               {(presence) => (
-                <Indicator
+                <config.Indicator
                   height={window.innerHeight}
                   time={presence().x}
                   value={presence().y}
@@ -603,7 +611,7 @@ export function createGraphComponent(api: Api) {
                 />
               )}
             </Show>
-            <Indicator
+            <config.Indicator
               height={window.innerHeight}
               time={sheet.time()}
               type="time"
@@ -612,7 +620,7 @@ export function createGraphComponent(api: Api) {
               {(anchor, index) => {
                 const [position, controls] = anchor
                 return (
-                  <Anchor
+                  <config.Anchor
                     position={position}
                     pre={controls?.pre}
                     post={controls?.post}

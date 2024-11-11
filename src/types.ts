@@ -3,11 +3,6 @@ export type Vector = {
   y: number
 }
 
-type RequireKeys<
-  TObject extends object,
-  TKeys extends keyof TObject
-> = Required<Pick<TObject, TKeys>> & Omit<TObject, TKeys>
-
 type BareControls = { pre: Vector; post: Vector }
 export type Controls<
   TRequired extends keyof BareControls | undefined = undefined
@@ -29,3 +24,16 @@ export type Segment = {
   range: number[]
   map: Vector[]
 }
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                      Utils                                     */
+/*                                                                                */
+/**********************************************************************************/
+
+export type RequireKeys<
+  TObject extends object,
+  TKeys extends keyof TObject
+> = Required<Pick<TObject, TKeys>> & Omit<TObject, TKeys>
+
+export type Merge<T, U> = T & U
