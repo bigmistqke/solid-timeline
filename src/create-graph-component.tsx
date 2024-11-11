@@ -8,38 +8,57 @@ import {
   createSignal,
   For,
   Index,
+  JSXElement,
+  mergeProps,
   onCleanup,
   Show,
   splitProps,
   useContext,
 } from 'solid-js'
+import { Dynamic } from 'solid-js/web'
 import { Api } from './create-timeline'
+import { DConfig } from './lib/d-from-anchors'
 import { divideVector, subtractVector } from './lib/vector'
 import { useSheet } from './sheet'
 import styles from './timeline.module.css'
-import { Vector } from './types'
+import { type Anchor, Vector } from './types'
 import { processProps } from './utils/default-props'
 import { whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                  Use Timeline                                  */
+/*                                  Use Graph                                  */
 /*                                                                                */
 /**********************************************************************************/
 
-const TimelineContext = createContext<{
+type GraphComponents = Partial<{
+  Anchor: typeof Anchor
+  Control: typeof Control
+  Grid: typeof Grid
+  Handle: typeof Handle
+  Indicator: typeof Indicator
+  Path: () => JSXElement
+}>
+
+interface TimelineContext extends Api {
+  project(point: Vector): Vector
   project(point: Vector | number, type: 'x' | 'y'): number
+  unproject(point: Vector): Vector
   unproject(point: Vector | number, type: 'x' | 'y'): number
   dimensions: Accessor<{ width: number; height: number } | undefined>
   zoom: Accessor<Vector>
   offset: Accessor<Vector>
-}>()
+  getValue(time: number): number
+  components: GraphComponents
+}
 
-function useTimeline() {
-  const context = useContext(TimelineContext)
+const GraphContext = createContext<TimelineContext>()
+
+export function useGraph() {
+  const context = useContext(GraphContext)
   if (!context) {
-    throw `useTimeline should be used in a descendant of Timeline`
+    throw `useGraph should be used in a descendant of Timeline`
   }
   return context
 }
@@ -51,56 +70,63 @@ function useTimeline() {
 /**********************************************************************************/
 
 function Grid(props: { grid: Vector }) {
-  const timeline = useTimeline()
+  const graph = useGraph()
 
   const offset = () => ({
-    x: Math.floor(timeline.offset().x / props.grid.x) * props.grid.x * -1,
+    x: Math.floor(graph.offset().x / props.grid.x) * props.grid.x * -1,
     y: 0,
   })
 
   return (
-    <Show when={timeline.dimensions()}>
-      {(dimensions) => (
-        <g data-timeline-grid class={styles.grid}>
-          <g data-timeline-grid-horizontal class={styles.horizontal}>
-            <Index
-              each={Array.from({
-                length: Math.floor(
-                  dimensions().height / (props.grid.y * timeline.zoom().y) + 2
-                ),
-              })}
-            >
-              {(_, y) => (
-                <line
-                  x1={0}
-                  x2={dimensions().width}
-                  y1={timeline.project(y * props.grid.y, 'y') + offset().y}
-                  y2={timeline.project(y * props.grid.y, 'y') + offset().y}
-                />
-              )}
-            </Index>
-          </g>
-          <g data-timeline-grid-horizontal class={styles.vertical}>
-            <Index
-              each={Array.from({
-                length:
-                  Math.floor(
-                    dimensions().width / (props.grid.x * timeline.zoom().x)
-                  ) + 2,
-              })}
-            >
-              {(_, x) => (
-                <line
-                  x1={timeline.project(x * props.grid.x, 'x') + offset().x}
-                  x2={timeline.project(x * props.grid.x, 'x') + offset().x}
-                  y1={0}
-                  y2={dimensions().height}
-                />
-              )}
-            </Index>
-          </g>
-        </g>
-      )}
+    <Show
+      when={!graph.components?.Grid}
+      fallback={<Dynamic component={graph.components.Grid} {...props} />}
+    >
+      {
+        <Show when={graph.dimensions()}>
+          {(dimensions) => (
+            <g data-timeline-grid class={styles.grid}>
+              <g data-timeline-grid-horizontal class={styles.horizontal}>
+                <Index
+                  each={Array.from({
+                    length: Math.floor(
+                      dimensions().height / (props.grid.y * graph.zoom().y) + 2
+                    ),
+                  })}
+                >
+                  {(_, y) => (
+                    <line
+                      x1={0}
+                      x2={dimensions().width}
+                      y1={graph.project(y * props.grid.y, 'y') + offset().y}
+                      y2={graph.project(y * props.grid.y, 'y') + offset().y}
+                    />
+                  )}
+                </Index>
+              </g>
+              <g data-timeline-grid-horizontal class={styles.vertical}>
+                <Index
+                  each={Array.from({
+                    length:
+                      Math.floor(
+                        dimensions().width / (props.grid.x * graph.zoom().x)
+                      ) + 2,
+                  })}
+                >
+                  {(_, x) => (
+                    <line
+                      x1={graph.project(x * props.grid.x, 'x') + offset().x}
+                      x2={graph.project(x * props.grid.x, 'x') + offset().x}
+                      y1={0}
+                      y2={dimensions().height}
+                    />
+                  )}
+                </Index>
+              </g>
+            </g>
+          )}
+        </Show>
+      }
     </Show>
   )
 }
@@ -117,7 +143,7 @@ function Handle(props: {
   onDblClick?(e: MouseEvent): void
   type: string
 }) {
-  const timeline = useTimeline()
+  const graph = useGraph()
   const sheet = useSheet()
 
   const [active, setActive] = createSignal(false)
@@ -133,34 +159,41 @@ function Handle(props: {
   }
 
   return (
-    <g
-      data-timeline-handle={props.type}
-      class={active() ? styles.active : undefined}
+    <Show
+      when={!graph.components.Handle}
+      fallback={<Dynamic component={graph.components.Handle} {...props} />}
     >
-      <circle
-        data-timeline-handle-trigger={props.type}
-        cx={timeline.project(props.position, 'x')}
-        cy={timeline.project(props.position, 'y')}
-        fill="transparent"
-        onDblClick={(e) => {
-          if (props.onDblClick) {
-            e.stopPropagation()
-            props.onDblClick(e)
-          }
-        }}
-        onPointerDown={onPointerDown}
-        r="10"
-        style={{ cursor: 'move' }}
-      />
-      <circle
-        data-timeline-handle-visual={props.type}
-        class={styles.handle}
-        cx={timeline.project(props.position, 'x')}
-        cy={timeline.project(props.position, 'y')}
-        r="3"
-        style={{ 'pointer-events': 'none' }}
-      />
-    </g>
+      {
+        <g
+          data-timeline-handle={props.type}
+          class={active() ? styles.active : undefined}
+        >
+          <circle
+            data-timeline-handle-trigger={props.type}
+            cx={graph.project(props.position, 'x')}
+            cy={graph.project(props.position, 'y')}
+            fill="transparent"
+            onDblClick={(e) => {
+              if (props.onDblClick) {
+                e.stopPropagation()
+                props.onDblClick(e)
+              }
+            }}
+            onPointerDown={onPointerDown}
+            r="10"
+            style={{ cursor: 'move' }}
+          />
+          <circle
+            data-timeline-handle-visual={props.type}
+            class={styles.handle}
+            cx={graph.project(props.position, 'x')}
+            cy={graph.project(props.position, 'y')}
+            r="3"
+            style={{ 'pointer-events': 'none' }}
+          />
+        </g>
+      }
+    </Show>
   )
 }
 
@@ -177,32 +210,39 @@ function Control(props: {
   position: Vector
   type: string
 }) {
-  const timeline = useTimeline()
+  const graph = useGraph()
   const [, rest] = splitProps(props, ['control', 'position'])
   return (
-    <g data-timeline-control={props.type}>
-      <line
-        data-timeline-control-clamped={props.type}
-        class={styles.controlClamped}
-        stroke="black"
-        x1={timeline.project(props.position, 'x')}
-        y1={timeline.project(props.position, 'y')}
-        x2={timeline.project(props.clampedControl, 'x')}
-        y2={timeline.project(props.clampedControl, 'y')}
-        style={{ 'pointer-events': 'none' }}
-      />
-      <line
-        data-timeline-control-unclamped={props.type}
-        class={styles.controlUnclamped}
-        stroke="lightgrey"
-        x1={timeline.project(props.clampedControl, 'x')}
-        y1={timeline.project(props.clampedControl, 'y')}
-        x2={timeline.project(props.control, 'x')}
-        y2={timeline.project(props.control, 'y')}
-        style={{ 'pointer-events': 'none' }}
-      />
-      <Handle position={props.control} {...rest} />
-    </g>
+    <Show
+      when={!graph.components.Control}
+      fallback={<Dynamic component={graph.components.Control} {...props} />}
+    >
+      {
+        <g data-timeline-control={props.type}>
+          <line
+            data-timeline-control-clamped={props.type}
+            class={styles.controlClamped}
+            stroke="black"
+            x1={graph.project(props.position, 'x')}
+            y1={graph.project(props.position, 'y')}
+            x2={graph.project(props.clampedControl, 'x')}
+            y2={graph.project(props.clampedControl, 'y')}
+            style={{ 'pointer-events': 'none' }}
+          />
+          <line
+            data-timeline-control-unclamped={props.type}
+            class={styles.controlUnclamped}
+            stroke="lightgrey"
+            x1={graph.project(props.clampedControl, 'x')}
+            y1={graph.project(props.clampedControl, 'y')}
+            x2={graph.project(props.control, 'x')}
+            y2={graph.project(props.control, 'y')}
+            style={{ 'pointer-events': 'none' }}
+          />
+          <Handle position={props.control} {...rest} />
+        </g>
+      }
+    </Show>
   )
 }
 
@@ -222,35 +262,111 @@ function Anchor(props: {
   pre?: Vector
   clampedPre?: Vector
 }) {
+  const graph = useGraph()
   return (
-    <g data-timeline-anchor>
-      <Show when={props.pre}>
-        <Control
-          type="pre"
-          clampedControl={props.clampedPre!}
-          control={props.pre!}
-          onDragStart={(event) => props.onControlDragStart('pre', event)}
-          position={props.position}
-        />
-      </Show>
-      <Show when={props.post}>
-        <Control
-          type="post"
-          clampedControl={props.clampedPost!}
-          control={props.post!}
-          onDragStart={(event) => props.onControlDragStart('post', event)}
-          position={props.position}
-        />
-      </Show>
-      <Handle
-        type="position"
-        position={props.position}
-        onDragStart={(event) => props.onPositionDragStart(event)}
-        onDblClick={props.onDeleteAnchor}
+    <Show
+      when={!graph.components.Anchor}
+      fallback={<Dynamic component={graph.components.Anchor} {...props} />}
+    >
+      {
+        <g data-timeline-anchor>
+          <Show when={props.pre}>
+            <Control
+              type="pre"
+              clampedControl={props.clampedPre!}
+              control={props.pre!}
+              onDragStart={(event) => props.onControlDragStart('pre', event)}
+              position={props.position}
+            />
+          </Show>
+          <Show when={props.post}>
+            <Control
+              type="post"
+              clampedControl={props.clampedPost!}
+              control={props.post!}
+              onDragStart={(event) => props.onControlDragStart('post', event)}
+              position={props.position}
+            />
+          </Show>
+          <Handle
+            type="position"
+            position={props.position}
+            onDragStart={(event) => props.onPositionDragStart(event)}
+            onDblClick={props.onDeleteAnchor}
+          />
+        </g>
+      }
+    </Show>
+  )
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                    Indicator                                   */
+/*                                                                                */
+/**********************************************************************************/
+
+function Indicator(props: {
+  height: number
+  time: number
+  value?: number
+  class?: string
+  onPointerDown?: (event: MouseEvent) => void
+  type: string
+}) {
+  const graph = useGraph()
+
+  return (
+    <g
+      data-timeline-indicator={props.type}
+      class={clsx(styles.indicator, props.class)}
+      onPointerDown={props.onPointerDown}
+    >
+      <line
+        y1={0}
+        y2={props.height}
+        x1={graph.project(props.time, 'x')}
+        x2={graph.project(props.time, 'x')}
+      />
+      <circle
+        cx={graph.project(props.time, 'x')}
+        cy={graph.project(props.value || graph.getValue(props.time), 'y')!}
+        r={3}
       />
     </g>
   )
 }
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                       Path                                     */
+/*                                                                                */
+/**********************************************************************************/
+
+function Path() {
+  const graph = useGraph()
+  return (
+    <Show
+      when={!graph.components.Path}
+      fallback={<Dynamic component={graph.components.Path} />}
+    >
+      {
+        <path
+          data-timeline-path
+          class={styles.path}
+          d={graph.d()}
+          style={{ 'pointer-events': 'none' }}
+        />
+      }
+    </Show>
+  )
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                             Create Graph Component                             */
+/*                                                                                */
+/**********************************************************************************/
 
 export interface TimelineProps extends ComponentProps<'div'> {
   max: number
@@ -263,49 +379,10 @@ export interface TimelineProps extends ComponentProps<'div'> {
     x: number
     y: number
   }
+  components?: GraphComponents
 }
 
-export function createGraphComponent({
-  absoluteAnchors,
-  addAnchor,
-  clampedAnchors,
-  d,
-  deleteAnchor,
-  getPairedAnchorPosition,
-  getValue,
-  setAnchors,
-}: Api) {
-  function Indicator(props: {
-    height: number
-    time: number
-    value?: number
-    class?: string
-    onPointerDown?: (event: MouseEvent) => void
-    type: string
-  }) {
-    const timeline = useTimeline()
-
-    return (
-      <g
-        data-timeline-indicator={props.type}
-        class={clsx(styles.indicator, props.class)}
-        onPointerDown={props.onPointerDown}
-      >
-        <line
-          y1={0}
-          y2={props.height}
-          x1={timeline.project(props.time, 'x')}
-          x2={timeline.project(props.time, 'x')}
-        />
-        <circle
-          cx={timeline.project(props.time, 'x')}
-          cy={timeline.project(props.value || getValue(props.time), 'y')!}
-          r={3}
-        />
-      </g>
-    )
-  }
-
+export function createGraphComponent(api: Api) {
   return function Graph(props: TimelineProps) {
     const sheet = useSheet()
     const [config, rest] = processProps(props, { paddingY: 10 }, [
@@ -350,13 +427,13 @@ export function createGraphComponent({
       }
       return {
         x: cursor.x,
-        y: getValue(cursor.x),
+        y: api.getValue(cursor.x),
       }
     })
 
     function isOutOfBounds(x: number) {
-      const [firstPosition] = absoluteAnchors[0]
-      const [lastPosition] = absoluteAnchors[absoluteAnchors.length - 1]
+      const [firstPosition] = api.absoluteAnchors[0]
+      const [lastPosition] = api.absoluteAnchors[api.absoluteAnchors.length - 1]
 
       return x < firstPosition.x || x > lastPosition.x
     }
@@ -404,7 +481,7 @@ export function createGraphComponent({
       index: number
       absoluteControl: Vector
     }) {
-      const [position] = absoluteAnchors[index]
+      const [position] = api.absoluteAnchors[index]
       return {
         // Absolute value to absolute offset from position
         y: Math.floor(absoluteControl.y - position.y),
@@ -426,7 +503,7 @@ export function createGraphComponent({
     function updatePadding() {
       let min = 0
       let max = 0
-      absoluteAnchors.forEach(([position, { pre, post } = {}]) => {
+      api.absoluteAnchors.forEach(([position, { pre, post } = {}]) => {
         min = Math.max(min, minPaddingFromVector(position))
         max = Math.max(max, maxPaddingFromVector(position))
         if (pre) {
@@ -444,13 +521,19 @@ export function createGraphComponent({
     }
 
     return (
-      <TimelineContext.Provider
+      <GraphContext.Provider
         value={{
+          ...api,
+          d: (config?: DConfig) => {
+            return api.d(config ?? { zoom: zoom(), offset: offset() })
+          },
           project,
           unproject,
           dimensions,
           zoom,
           offset,
+          getValue: api.getValue,
+          components: mergeProps(() => props.components || {}),
         }}
       >
         <div {...rest}>
@@ -499,7 +582,7 @@ export function createGraphComponent({
             onDblClick={() => {
               const anchor = presence()
               if (anchor) {
-                addAnchor(anchor.x, anchor.y)
+                api.addAnchor(anchor.x, anchor.y)
                 updatePadding()
               }
             }}
@@ -508,15 +591,7 @@ export function createGraphComponent({
             }}
           >
             <Show when={config.grid}>{(grid) => <Grid grid={grid()} />}</Show>
-            <path
-              data-timeline-path
-              class={styles.path}
-              d={d({
-                zoom: zoom(),
-                offset: offset(),
-              })}
-              style={{ 'pointer-events': 'none' }}
-            />
+            <Path />
             <Show when={!sheet.isDraggingHandle() && presence()}>
               {(presence) => (
                 <Indicator
@@ -533,8 +608,7 @@ export function createGraphComponent({
               time={sheet.time()}
               type="time"
             />
-
-            <For each={absoluteAnchors}>
+            <For each={api.absoluteAnchors}>
               {(anchor, index) => {
                 const [position, controls] = anchor
                 return (
@@ -542,9 +616,9 @@ export function createGraphComponent({
                     position={position}
                     pre={controls?.pre}
                     post={controls?.post}
-                    clampedPre={clampedAnchors[index()][1]?.pre}
-                    clampedPost={clampedAnchors[index()][1]?.post}
-                    onDeleteAnchor={() => deleteAnchor(index())}
+                    clampedPre={api.clampedAnchors[index()][1]?.pre}
+                    clampedPost={api.clampedAnchors[index()][1]?.post}
+                    onDeleteAnchor={() => api.deleteAnchor(index())}
                     onControlDragStart={async function (type, event) {
                       const initialControl = { ...controls![type]! }
                       const pairedType = type === 'pre' ? 'post' : 'pre'
@@ -561,16 +635,16 @@ export function createGraphComponent({
                           type,
                           absoluteControl,
                         })
-                        setAnchors(index(), 1, type, control)
+                        api.setAnchors(index(), 1, type, control)
 
                         // Symmetric dragging of paired control
                         if (
                           sheet.modifiers.meta &&
-                          index() !== absoluteAnchors.length - 1 &&
+                          index() !== api.absoluteAnchors.length - 1 &&
                           index() !== 0
                         ) {
-                          console.log(index(), absoluteAnchors.length)
-                          setAnchors(index(), 1, pairedType, {
+                          console.log(index(), api.absoluteAnchors.length)
+                          api.setAnchors(index(), 1, pairedType, {
                             x: control.x,
                             y: control.y * -1,
                           })
@@ -582,8 +656,8 @@ export function createGraphComponent({
                     onPositionDragStart={async function (event) {
                       const initialPosition = { ...anchor[0] }
 
-                      const pre = getPairedAnchorPosition('pre', index())
-                      const post = getPairedAnchorPosition('post', index())
+                      const pre = api.getPairedAnchorPosition('pre', index())
+                      const post = api.getPairedAnchorPosition('post', index())
 
                       await pointerHelper(event, ({ delta }) => {
                         delta = divideVector(delta, zoom())
@@ -600,7 +674,7 @@ export function createGraphComponent({
                           position.x = post.x - 1
                         }
 
-                        setAnchors(index(), 0, position)
+                        api.setAnchors(index(), 0, position)
                       })
 
                       updatePadding()
@@ -612,7 +686,7 @@ export function createGraphComponent({
             {config.children}
           </svg>
         </div>
-      </TimelineContext.Provider>
+      </GraphContext.Provider>
     )
   }
 }

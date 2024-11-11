@@ -18,6 +18,7 @@ import { createArrayProxy } from './utils/create-array-proxy'
 export type Api = {
   absoluteAnchors: Array<Anchor>
   clampedAnchors: Array<Anchor>
+  segments: Accessor<Array<Accessor<Segment>>>
   anchors: Array<Anchor>
   d(config?: DConfig): string
   getValue(time: number): number
@@ -249,6 +250,7 @@ export function createTimeline(config?: { initial?: Anchors }) {
 
   const api: Api = {
     absoluteAnchors,
+    segments,
     clampedAnchors,
     anchors,
     addAnchor,
