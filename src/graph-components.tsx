@@ -16,6 +16,26 @@ import { Vector } from './types'
 import { whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
 
+export const graphComponentNames = [
+  'Anchor',
+  'Control',
+  'Grid',
+  'Handle',
+  'Indicator',
+  'Path',
+  'Root',
+] as const
+
+export interface GraphComponents {
+  Anchor: typeof Anchor
+  Control: typeof Control
+  Grid: typeof Grid
+  Handle: typeof Handle
+  Indicator: typeof Indicator
+  Path: typeof Path
+  Root: typeof Root
+}
+
 /**********************************************************************************/
 /*                                                                                */
 /*                                     Grid                                    */
@@ -56,7 +76,7 @@ export function Grid(props: GridProps) {
               )}
             </Index>
           </g>
-          <g data-timeline-grid-horizontal>
+          <g data-timeline-grid-vertical>
             <Index
               each={Array.from({
                 length:

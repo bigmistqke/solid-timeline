@@ -1,4 +1,4 @@
-import { Accessor, createMemo, mapArray } from 'solid-js'
+import { Accessor, createMemo, mapArray, mergeProps } from 'solid-js'
 import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import { createGraphComponent } from './create-graph-component'
 import { createValueComponent } from './create-value-component'
@@ -15,7 +15,7 @@ import { createArrayProxy } from './utils/create-array-proxy'
 /*                                                                                */
 /**********************************************************************************/
 
-export type Api = {
+export interface Api {
   absoluteAnchors: Array<Anchor>
   clampedAnchors: Array<Anchor>
   segments: Accessor<Array<Accessor<Segment>>>
@@ -31,8 +31,8 @@ export type Api = {
   ): Vector | undefined
 }
 
-export function createTimeline(config?: { initial?: Anchors }) {
-  const [anchors, setAnchors] = createStore<Anchors>(config?.initial || [])
+export function createTimeline(initial?: Anchors) {
+  const [anchors, setAnchors] = createStore<Anchors>(initial || [])
 
   const absoluteAnchors = createArrayProxy(
     mapArray(
@@ -261,9 +261,8 @@ export function createTimeline(config?: { initial?: Anchors }) {
     getPairedAnchorPosition,
   }
 
-  return {
-    ...api,
+  return mergeProps(api, {
     Value: createValueComponent(api),
     Graph: createGraphComponent(api),
-  }
+  })
 }

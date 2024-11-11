@@ -1,8 +1,6 @@
-import { getStroke } from 'perfect-freehand'
-import { createMemo, createSignal, onCleanup } from 'solid-js'
+import { createSignal, onCleanup } from 'solid-js'
 import { createTimeline, Sheet } from 'solid-timeline'
 import { createClock } from 'solid-timeline/create-clock'
-import { useGraph } from 'solid-timeline/create-graph-component'
 import styles from './App.module.css'
 
 const average = (a, b) => (a + b) / 2
@@ -60,51 +58,47 @@ function App() {
     speed: 0.1,
   })
 
-  const TopTimeline = createTimeline({
-    initial: [
-      [{ x: 0, y: 0 }],
-      [
-        { x: 400, y: 300 },
-        {
-          pre: { x: 100, y: 0 },
-          post: { x: 100, y: 0 },
-        },
-      ],
-      [
-        { x: 800, y: 0 },
-        {
-          pre: { x: 100, y: 0 },
-        },
-      ],
+  const TopTimeline = createTimeline([
+    [{ x: 0, y: 0 }],
+    [
+      { x: 400, y: 300 },
+      {
+        pre: { x: 100, y: 0 },
+        post: { x: 100, y: 0 },
+      },
     ],
-  })
+    [
+      { x: 800, y: 0 },
+      {
+        pre: { x: 100, y: 0 },
+      },
+    ],
+  ])
 
-  const LeftTimeline = createTimeline({
-    initial: [
-      [{ x: 0, y: 0 }],
-      [{ x: 300, y: 750 }],
-      [
-        { x: 600, y: 0 },
-        {
-          pre: { x: 100, y: 0 },
-        },
-      ],
-      [
-        { x: 900, y: 500 },
-        {
-          pre: { x: 100, y: 0 },
-          post: { x: 100, y: 0 },
-        },
-      ],
-      [{ x: 1200, y: 100 }],
-      [
-        { x: 1500, y: 750 },
-        {
-          pre: { x: 100, y: 0 },
-        },
-      ],
+  const LeftTimeline = createTimeline([
+    [{ x: 0, y: 0 }],
+    [{ x: 300, y: 750 }],
+    [
+      { x: 600, y: 0 },
+      {
+        pre: { x: 100, y: 0 },
+      },
     ],
-  })
+    [
+      { x: 900, y: 500 },
+      {
+        pre: { x: 100, y: 0 },
+        post: { x: 100, y: 0 },
+      },
+    ],
+    [{ x: 1200, y: 100 }],
+    [
+      { x: 1500, y: 750 },
+      {
+        pre: { x: 100, y: 0 },
+      },
+    ],
+  ])
 
   function onRef(element: HTMLDivElement) {
     function updateDomRect() {
@@ -148,29 +142,6 @@ function App() {
             max={window.innerWidth}
             class={styles.timeline}
             grid={{ x: 100, y: 500 }}
-            components={{
-              Path() {
-                const graph = useGraph()
-
-                const outline = createMemo(() =>
-                  getStroke(
-                    graph
-                      .segments()
-                      .flatMap((segment) =>
-                        segment().map.map((vector) => graph.project(vector))
-                      )
-                  )
-                )
-
-                return (
-                  <path
-                    d={getSvgPathFromStroke(outline())}
-                    fill="pink"
-                    style={{ 'pointer-events': 'none' }}
-                  />
-                )
-              },
-            }}
           />
         </div>
       </Sheet>

@@ -6,18 +6,11 @@ import {
   createMemo,
   createSignal,
   mergeProps,
+  splitProps,
   useContext,
 } from 'solid-js'
 import { Api } from './create-timeline'
-import {
-  Anchor,
-  Control,
-  Grid,
-  Handle,
-  Indicator,
-  Path,
-  Root,
-} from './graph-components'
+import { graphComponentNames, GraphComponents } from './graph-components'
 import { DConfig } from './lib/d-from-anchors'
 import { useSheet } from './sheet'
 import { Merge, Vector } from './types'
@@ -29,16 +22,6 @@ import { whenMemo } from './utils/once-every-when'
 /*                                  Use Graph                                  */
 /*                                                                                */
 /**********************************************************************************/
-
-export interface GraphComponents {
-  Anchor: typeof Anchor
-  Control: typeof Control
-  Grid: typeof Grid
-  Handle: typeof Handle
-  Indicator: typeof Indicator
-  Path: typeof Path
-  Root: typeof Root
-}
 
 interface GraphContext extends Merge<Api, GraphComponents> {
   project(point: Vector): Vector
@@ -92,21 +75,14 @@ export interface RootProps
 export function createGraphComponent(api: Api) {
   return function Graph(props: RootProps) {
     const sheet = useSheet()
-    const [config, graphComponents, rest] = processProps(
+    const [config, rest] = processProps(
       props,
       {
         paddingY: 10,
-        Path,
-        Anchor,
-        Indicator,
-        Control,
-        Handle,
-        Grid,
-        Root,
       },
-      ['max', 'min', 'onPan', 'onTimeChange', 'onZoomChange', 'paddingY'],
-      ['Anchor', 'Control', 'Grid', 'Handle', 'Indicator', 'Path', 'Root']
+      ['max', 'min', 'onPan', 'onTimeChange', 'onZoomChange', 'paddingY']
     )
+    const [sheetGraphComponents] = splitProps(sheet, graphComponentNames)
 
     const [dimensions, setDimensions] = createSignal<{
       width: number
@@ -223,7 +199,7 @@ export function createGraphComponent(api: Api) {
     createEffect(() => config.onZoomChange?.(zoom()))
     createEffect(() => config.onPan?.(sheet.pan()))
 
-    const graph: GraphContext = mergeProps(api, graphComponents, {
+    const graph: GraphContext = mergeProps(sheetGraphComponents, api, {
       d(config?: DConfig) {
         return api.d(config ?? { zoom: zoom(), offset: offset() })
       },
@@ -232,6 +208,7 @@ export function createGraphComponent(api: Api) {
       dimensions,
       zoom,
       offset,
+      getValue: api.getValue,
       updatePadding,
       absoluteToRelativeControl,
       isOutOfBounds,
