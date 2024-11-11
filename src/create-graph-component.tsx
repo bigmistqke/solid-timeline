@@ -458,6 +458,7 @@ export function createGraphComponent({
             ref={(element) => {
               function updateDomRect() {
                 setDimensions(element.getBoundingClientRect())
+                updatePadding()
               }
               const observer = new ResizeObserver(updateDomRect)
               observer.observe(element)
