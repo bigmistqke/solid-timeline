@@ -29,7 +29,6 @@ import { pointerHelper } from './utils/pointer-helper'
 
 const TimelineContext = createContext<{
   origin: Accessor<Vector>
-  paddingY: Accessor<number>
   project(point: Vector | number, type: 'x' | 'y'): number
   unproject(point: Vector | number, type: 'x' | 'y'): number
   zoom: Accessor<Vector>
@@ -73,7 +72,7 @@ function Handle(props: {
     <g class={clsx(styles.handleContainer, active() && styles.active)}>
       <circle
         cx={timeline.project(props.position, 'x')}
-        cy={timeline.project(props.position, 'y') + timeline.paddingY()}
+        cy={timeline.project(props.position, 'y')}
         fill="transparent"
         onDblClick={(e) => {
           if (props.onDblClick) {
@@ -88,7 +87,7 @@ function Handle(props: {
       <circle
         class={styles.handle}
         cx={timeline.project(props.position, 'x')}
-        cy={timeline.project(props.position, 'y') + timeline.paddingY()}
+        cy={timeline.project(props.position, 'y')}
         r="3"
         style={{ 'pointer-events': 'none' }}
       />
@@ -116,18 +115,18 @@ function Control(props: {
         class={styles.clamped}
         stroke="black"
         x1={timeline.project(props.position, 'x')}
-        y1={timeline.project(props.position, 'y') + timeline.paddingY()}
+        y1={timeline.project(props.position, 'y')}
         x2={timeline.project(props.clampedControl, 'x')}
-        y2={timeline.project(props.clampedControl, 'y') + timeline.paddingY()}
+        y2={timeline.project(props.clampedControl, 'y')}
         style={{ 'pointer-events': 'none' }}
       />
       <line
         class={styles.unclamped}
         stroke="lightgrey"
         x1={timeline.project(props.clampedControl, 'x')}
-        y1={timeline.project(props.clampedControl, 'y') + timeline.paddingY()}
+        y1={timeline.project(props.clampedControl, 'y')}
         x2={timeline.project(props.control, 'x')}
-        y2={timeline.project(props.control, 'y') + timeline.paddingY()}
+        y2={timeline.project(props.control, 'y')}
         style={{ 'pointer-events': 'none' }}
       />
       <Handle position={props.control} {...rest} />
@@ -210,10 +209,7 @@ export function createTimelineComponent({
         />
         <circle
           cx={timeline.project(props.time, 'x')}
-          cy={
-            timeline.project(props.value || getValue(props.time), 'y')! +
-            timeline.paddingY()
-          }
+          cy={timeline.project(props.value || getValue(props.time), 'y')!}
           r={3}
         />
       </g>
@@ -293,7 +289,8 @@ export function createTimelineComponent({
       }
 
       const value = typeof point === 'object' ? point[axis] : point
-      return (value + origin[axis]) * zoom()[axis]
+      const offset = axis === 'y' ? config.paddingY : 0
+      return (value + origin[axis]) * zoom()[axis] + offset
     }
 
     function unproject(point: Vector): Vector
@@ -314,7 +311,7 @@ export function createTimelineComponent({
       if (axis === 'x') {
         return value / zoom().x - origin.x
       } else {
-        return value / zoom().y - origin.y
+        return value / zoom().y - origin.y - config.paddingY
       }
     }
 
@@ -460,7 +457,6 @@ export function createTimelineComponent({
       <TimelineContext.Provider
         value={{
           origin: () => origin,
-          paddingY: () => config.paddingY,
           zoom,
           project,
           unproject,
@@ -503,7 +499,7 @@ export function createTimelineComponent({
             setCursor(
               unproject({
                 x: e.offsetX,
-                y: e.offsetY - config.paddingY,
+                y: e.offsetY,
               })
             )
           }}
