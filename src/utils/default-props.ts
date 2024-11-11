@@ -7,9 +7,9 @@ type KeyOfOptionals<T> = keyof {
 export function processProps<
   TProps extends Record<string, any>,
   TKey extends KeyOfOptionals<TProps>,
-  TSplit extends (keyof TProps)[]
->(props: TProps, defaults: Required<Pick<TProps, TKey>>, split?: TSplit) {
-  return splitProps(defaultProps(props, defaults), split || [])
+  TSplit extends [readonly (keyof TProps)[], ...(readonly (keyof TProps)[])[]]
+>(props: TProps, defaults: Required<Pick<TProps, TKey>>, ...split: TSplit) {
+  return splitProps(defaultProps(props, defaults), ...split)
 }
 
 // from https://github.com/solidjs/solid/issues/1526#issuecomment-1623035790
