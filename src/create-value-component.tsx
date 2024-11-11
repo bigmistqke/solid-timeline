@@ -2,7 +2,6 @@ import {
   Accessor,
   ComponentProps,
   createContext,
-  ParentProps,
   Setter,
   useContext,
 } from 'solid-js'
@@ -23,13 +22,13 @@ const useValue = () => {
 }
 
 export function createValueComponent({ addAnchor, getValue }: Api) {
-  function Value(props: ParentProps) {
+  function Value(props: ComponentProps<'div'>) {
     const { time } = useSheet()
     const [value, setValue] = createWritable(() => getValue(time()))
 
     return (
       <ValueContext.Provider value={{ value, setValue }}>
-        {props.children}
+        <div {...props} />
       </ValueContext.Provider>
     )
   }
