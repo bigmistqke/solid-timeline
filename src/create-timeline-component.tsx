@@ -15,9 +15,9 @@ import { Api } from './create-timeline'
 import { divideVector, subtractVector } from './lib/vector'
 import { useSheet } from './sheet'
 import styles from './timeline.module.css'
-import { Anchor as AnchorType, Vector } from './types'
+import { Vector } from './types'
 import { processProps } from './utils/default-props'
-import { when, whenMemo } from './utils/once-every-when'
+import { whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
 
 /**********************************************************************************/
@@ -174,6 +174,15 @@ function Anchor(props: {
   )
 }
 
+export interface TimelineProps extends ComponentProps<'div'> {
+  max: number
+  min: number
+  onPan?(pan: number): void
+  onTimeChange?(time: number): void
+  onZoomChange?(zoom: Vector): void
+  paddingY?: number
+}
+
 export function createTimelineComponent({
   absoluteAnchors,
   addAnchor,
@@ -213,16 +222,7 @@ export function createTimelineComponent({
     )
   }
 
-  return function Timeline(
-    props: ComponentProps<'svg'> & {
-      max: number
-      min: number
-      onPan?(pan: number): void
-      onTimeChange?(time: number): void
-      onZoomChange?(zoom: Vector): void
-      paddingY?: number
-    }
-  ) {
+  return function Timeline(props: TimelineProps) {
     const sheet = useSheet()
     const [config, rest] = processProps(props, { paddingY: 10 }, [
       'max',
@@ -235,41 +235,43 @@ export function createTimelineComponent({
       'paddingY',
     ])
 
-    const [domRect, setDomRect] = createSignal<DOMRect>()
+    const [height, setHeight] = createSignal<number>()
     const [paddingMax, setPaddingMax] = createSignal(0)
     const [paddingMin, setPaddingMin] = createSignal(0)
 
-    const [cursor, setCursor] = createSignal<
-      { x: number; y?: number } | undefined
-    >(undefined)
-    const presence = createMemo(
-      when(cursor, (cursor) => ({
-        x: cursor.x,
-        y:
-          sheet.modifiers.meta || isOutOfBounds(cursor.x)
-            ? cursor.y
-            : getValue(cursor.x),
-      }))
-    )
-
     const zoom = whenMemo(
-      domRect,
-      (domRect) => ({
+      height,
+      (height) => ({
         x: sheet.zoomX(),
         y:
-          (domRect.height - config.paddingY * 2) /
+          (height - config.paddingY * 2) /
           (config.max - config.min + paddingMax() + paddingMin()),
       }),
       { x: 1, y: 1 }
     )
 
-    const offset = {
-      get x() {
-        return sheet.pan() * zoom().x
-      },
-      get y() {
-        return (paddingMin() - config.min) * zoom().y + config.paddingY
-      },
+    const offset = createMemo(() => ({
+      x: sheet.pan() * zoom().x,
+      y: (paddingMin() - config.min) * zoom().y + config.paddingY,
+    }))
+
+    const [cursor, setCursor] = createSignal<Vector | undefined>(undefined)
+
+    const presence = whenMemo(cursor, (cursor) => {
+      if (sheet.modifiers.meta || isOutOfBounds(cursor.x)) {
+        return cursor
+      }
+      return {
+        x: cursor.x,
+        y: getValue(cursor.x),
+      }
+    })
+
+    function isOutOfBounds(x: number) {
+      const [firstPosition] = absoluteAnchors[0]
+      const [lastPosition] = absoluteAnchors[absoluteAnchors.length - 1]
+      const presenceX = unproject(x, 'x')
+      return presenceX < firstPosition.x || presenceX > lastPosition.x
     }
 
     function project(point: Vector | number): Vector
@@ -286,7 +288,7 @@ export function createTimelineComponent({
       }
 
       const value = typeof point === 'object' ? point[axis] : point
-      return value * zoom()[axis] + offset[axis]
+      return value * zoom()[axis] + offset()[axis]
     }
 
     function unproject(point: Vector): Vector
@@ -303,7 +305,7 @@ export function createTimelineComponent({
       }
 
       const value = typeof point === 'object' ? point[axis] : point
-      return (value - offset[axis]) / zoom()[axis]
+      return (value - offset()[axis]) / zoom()[axis]
     }
 
     /**
@@ -333,83 +335,6 @@ export function createTimelineComponent({
       }
     }
 
-    async function onControlDragStart({
-      type,
-      event,
-      anchor: [, controls],
-      index,
-    }: {
-      type: 'pre' | 'post'
-      event: MouseEvent
-      anchor: AnchorType
-      index: number
-    }) {
-      const initialControl = { ...controls![type]! }
-      const pairedType = type === 'pre' ? 'post' : 'pre'
-
-      await pointerHelper(event, ({ delta }) => {
-        delta = divideVector(delta, zoom())
-
-        const absoluteControl = subtractVector(initialControl, delta)
-        const control = absoluteToRelativeControl({
-          index,
-          type,
-          absoluteControl,
-        })
-        setAnchors(index, 1, type, control)
-
-        // Symmetric dragging of paired control
-        if (
-          sheet.modifiers.meta &&
-          index !== absoluteAnchors.length - 1 &&
-          index !== 0
-        ) {
-          console.log(index, absoluteAnchors.length)
-          setAnchors(index, 1, pairedType, {
-            x: control.x,
-            y: control.y * -1,
-          })
-        }
-      })
-
-      updatePadding()
-    }
-
-    async function onPositionDragStart({
-      anchor,
-      event,
-      index,
-    }: {
-      anchor: AnchorType
-      event: MouseEvent
-      index: number
-    }) {
-      const initialPosition = { ...anchor[0] }
-
-      const pre = getPairedAnchorPosition('pre', index)
-      const post = getPairedAnchorPosition('post', index)
-
-      await pointerHelper(event, ({ delta }) => {
-        delta = divideVector(delta, zoom())
-
-        const position = subtractVector(initialPosition, delta)
-
-        // Clamp position with the pre-anchor's position
-        if (pre && position.x - 1 < pre.x) {
-          position.x = pre.x + 1
-        }
-
-        // Clamp position with the pre-anchor's position
-        if (post && position.x + 1 > post.x) {
-          position.x = post.x - 1
-        }
-
-        setAnchors(index, 0, position)
-      })
-
-      updatePadding()
-    }
-
     function maxPaddingFromVector(value: Vector) {
       return Math.max(value.y, config.max) - config.max
     }
@@ -437,13 +362,6 @@ export function createTimelineComponent({
       setPaddingMax(max)
     }
 
-    const isOutOfBounds = (x: number) => {
-      const [firstPosition] = absoluteAnchors[0]
-      const [lastPosition] = absoluteAnchors[absoluteAnchors.length - 1]
-      const presenceX = unproject(x, 'x')
-      return presenceX < firstPosition.x || presenceX > lastPosition.x
-    }
-
     return (
       <TimelineContext.Provider
         value={{
@@ -451,112 +369,158 @@ export function createTimelineComponent({
           unproject,
         }}
       >
-        <svg
-          ref={(element) => {
-            function updateDomRect() {
-              setDomRect(element.getBoundingClientRect())
-            }
-            const observer = new ResizeObserver(updateDomRect)
-            observer.observe(element)
-            updateDomRect()
-            onCleanup(() => observer.disconnect())
+        <div {...rest}>
+          <svg
+            ref={(element) => {
+              function updateDomRect() {
+                setHeight(element.getBoundingClientRect().height)
+              }
+              const observer = new ResizeObserver(updateDomRect)
+              observer.observe(element)
+              updateDomRect()
+              onCleanup(() => observer.disconnect())
 
-            updatePadding()
-            createEffect(() => config.onZoomChange?.(zoom()))
-            createEffect(() => config.onPan?.(sheet.pan()))
-          }}
-          width="100%"
-          height="100%"
-          class={clsx(config.class, styles.timeline)}
-          {...rest}
-          onPointerDown={async (event) => {
-            if (event.target !== event.currentTarget) {
-              return
-            }
-            if (sheet.modifiers.shift) {
-              const x = sheet.pan()
-              await pointerHelper(event, ({ delta, event }) => {
-                sheet.setPan(x - delta.x / zoom().x)
-                setCursor((presence) => ({
-                  ...presence!,
-                  x: unproject(event.offsetX, 'x'),
-                }))
-              })
-            }
-          }}
-          onPointerMove={(e) => {
-            setCursor(
-              unproject({
-                x: e.offsetX,
-                y: e.offsetY,
-              })
-            )
-          }}
-          onPointerLeave={() => {
-            setCursor(undefined)
-          }}
-          onDblClick={() => {
-            const anchor = presence()
-            if (anchor) {
-              addAnchor(anchor.x, anchor.y)
               updatePadding()
-            }
-          }}
-          onWheel={(e) => {
-            sheet.setPan((pan) => pan + e.deltaX)
-          }}
-        >
-          <path
-            class={styles.path}
-            d={d({
-              zoom: zoom(),
-              offset,
-            })}
-            style={{ 'pointer-events': 'none' }}
-          />
-          <Show when={!sheet.isDraggingHandle() && presence()}>
-            {(presence) => (
-              <Indicator
-                height={window.innerHeight}
-                time={presence().x}
-                value={presence().y}
-                class={styles.presence}
-              />
-            )}
-          </Show>
-          <Indicator height={window.innerHeight} time={sheet.time()} />
-          <For each={absoluteAnchors}>
-            {(anchor, index) => {
-              const [position, controls] = anchor
-              return (
-                <Anchor
-                  position={position}
-                  pre={controls?.pre}
-                  post={controls?.post}
-                  clampedPre={clampedAnchors[index()][1]?.pre}
-                  clampedPost={clampedAnchors[index()][1]?.post}
-                  onDeleteAnchor={() => deleteAnchor(index())}
-                  onControlDragStart={(type, event) =>
-                    onControlDragStart({
-                      type,
-                      event,
-                      index: index(),
-                      anchor,
-                    })
-                  }
-                  onPositionDragStart={(event) =>
-                    onPositionDragStart({
-                      event,
-                      index: index(),
-                      anchor,
-                    })
-                  }
-                />
+              createEffect(() => config.onZoomChange?.(zoom()))
+              createEffect(() => config.onPan?.(sheet.pan()))
+            }}
+            width="100%"
+            height="100%"
+            class={clsx(config.class, styles.timeline)}
+            onPointerDown={async (event) => {
+              if (event.target !== event.currentTarget) {
+                return
+              }
+              if (sheet.modifiers.shift) {
+                const x = sheet.pan()
+                await pointerHelper(event, ({ delta, event }) => {
+                  sheet.setPan(x - delta.x / zoom().x)
+                  setCursor((presence) => ({
+                    ...presence!,
+                    x: unproject(event.offsetX, 'x'),
+                  }))
+                })
+              }
+            }}
+            onPointerMove={(e) => {
+              setCursor(
+                unproject({
+                  x: e.offsetX,
+                  y: e.offsetY,
+                })
               )
             }}
-          </For>
-          {config.children}
-        </svg>
+            onPointerLeave={() => {
+              setCursor(undefined)
+            }}
+            onDblClick={() => {
+              const anchor = presence()
+              if (anchor) {
+                addAnchor(anchor.x, anchor.y)
+                updatePadding()
+              }
+            }}
+            onWheel={(e) => {
+              sheet.setPan((pan) => pan + e.deltaX)
+            }}
+          >
+            <path
+              class={styles.path}
+              d={d({
+                zoom: zoom(),
+                offset: offset(),
+              })}
+              style={{ 'pointer-events': 'none' }}
+            />
+            <Show when={!sheet.isDraggingHandle() && presence()}>
+              {(presence) => (
+                <Indicator
+                  height={window.innerHeight}
+                  time={presence().x}
+                  value={presence().y}
+                  class={styles.presence}
+                />
+              )}
+            </Show>
+            <Indicator height={window.innerHeight} time={sheet.time()} />
+            <For each={absoluteAnchors}>
+              {(anchor, index) => {
+                const [position, controls] = anchor
+                return (
+                  <Anchor
+                    position={position}
+                    pre={controls?.pre}
+                    post={controls?.post}
+                    clampedPre={clampedAnchors[index()][1]?.pre}
+                    clampedPost={clampedAnchors[index()][1]?.post}
+                    onDeleteAnchor={() => deleteAnchor(index())}
+                    onControlDragStart={async function (type, event) {
+                      const initialControl = { ...controls![type]! }
+                      const pairedType = type === 'pre' ? 'post' : 'pre'
+
+                      await pointerHelper(event, ({ delta }) => {
+                        delta = divideVector(delta, zoom())
+
+                        const absoluteControl = subtractVector(
+                          initialControl,
+                          delta
+                        )
+                        const control = absoluteToRelativeControl({
+                          index: index(),
+                          type,
+                          absoluteControl,
+                        })
+                        setAnchors(index(), 1, type, control)
+
+                        // Symmetric dragging of paired control
+                        if (
+                          sheet.modifiers.meta &&
+                          index() !== absoluteAnchors.length - 1 &&
+                          index() !== 0
+                        ) {
+                          console.log(index(), absoluteAnchors.length)
+                          setAnchors(index(), 1, pairedType, {
+                            x: control.x,
+                            y: control.y * -1,
+                          })
+                        }
+                      })
+
+                      updatePadding()
+                    }}
+                    onPositionDragStart={async function (event) {
+                      const initialPosition = { ...anchor[0] }
+
+                      const pre = getPairedAnchorPosition('pre', index())
+                      const post = getPairedAnchorPosition('post', index())
+
+                      await pointerHelper(event, ({ delta }) => {
+                        delta = divideVector(delta, zoom())
+
+                        const position = subtractVector(initialPosition, delta)
+
+                        // Clamp position with the pre-anchor's position
+                        if (pre && position.x - 1 < pre.x) {
+                          position.x = pre.x + 1
+                        }
+
+                        // Clamp position with the pre-anchor's position
+                        if (post && position.x + 1 > post.x) {
+                          position.x = post.x - 1
+                        }
+
+                        setAnchors(index(), 0, position)
+                      })
+
+                      updatePadding()
+                    }}
+                  />
+                )
+              }}
+            </For>
+            {config.children}
+          </svg>
+        </div>
       </TimelineContext.Provider>
     )
   }

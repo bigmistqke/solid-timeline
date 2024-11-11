@@ -114,12 +114,22 @@ function App() {
         <TopTimeline.Component
           min={0}
           max={window.innerHeight}
-          style={{ height: '50px' }}
+          style={{
+            height: '50px',
+            background: 'lightgrey',
+            resize: 'vertical',
+            overflow: 'hidden',
+          }}
         />
         <LeftTimeline.Component
           min={0}
           max={window.innerWidth}
-          style={{ height: '50px' }}
+          style={{
+            height: '50px',
+            background: 'lightgrey',
+            resize: 'vertical',
+            overflow: 'hidden',
+          }}
         />
       </Sheet>
     </div>
