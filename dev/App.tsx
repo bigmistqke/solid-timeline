@@ -98,6 +98,7 @@ function App() {
             min={0}
             max={window.innerHeight}
             class={styles.timeline}
+            grid={{ x: 100, y: 250 }}
           />
         </div>
         <div class={styles.timelineContainer}>
@@ -109,6 +110,7 @@ function App() {
             min={0}
             max={window.innerWidth}
             class={styles.timeline}
+            grid={{ x: 100, y: 500 }}
           />
         </div>
       </Sheet>

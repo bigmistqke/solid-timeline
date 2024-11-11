@@ -44,3 +44,7 @@
     pointer-events: none;
   }
 }
+
+.grid {
+  stroke: lightgrey;
+}

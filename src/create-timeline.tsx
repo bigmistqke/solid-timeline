@@ -186,7 +186,9 @@ export function createTimeline(config?: { initial?: Anchors }) {
           }
 
           anchors.push([{ x: time, y: value }, { pre: { x: maxX, y: 0 } }])
-        } else if (index === 0) {
+        }
+        // First element
+        else if (index === 0) {
           const [firstPosition, firstControl] = anchors[0]
           const maxX = Math.min((firstPosition.x - time) / 2, 100)
 

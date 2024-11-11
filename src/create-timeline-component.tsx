@@ -1,11 +1,13 @@
 import clsx from 'clsx'
 import {
+  Accessor,
   ComponentProps,
   createContext,
   createEffect,
   createMemo,
   createSignal,
   For,
+  Index,
   onCleanup,
   Show,
   splitProps,
@@ -29,6 +31,9 @@ import { pointerHelper } from './utils/pointer-helper'
 const TimelineContext = createContext<{
   project(point: Vector | number, type: 'x' | 'y'): number
   unproject(point: Vector | number, type: 'x' | 'y'): number
+  dimensions: Accessor<{ width: number; height: number } | undefined>
+  zoom: Accessor<Vector>
+  offset: Accessor<Vector>
 }>()
 
 function useTimeline() {
@@ -37,6 +42,67 @@ function useTimeline() {
     throw `useTimeline should be used in a descendant of Timeline`
   }
   return context
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                     Grid                                    */
+/*                                                                                */
+/**********************************************************************************/
+
+function Grid(props: { grid: Vector }) {
+  const timeline = useTimeline()
+
+  const offset = () => ({
+    x: Math.floor(timeline.offset().x / props.grid.x) * props.grid.x * -1,
+    y: 0,
+  })
+
+  return (
+    <Show when={timeline.dimensions()}>
+      {(dimensions) => (
+        <g class={styles.grid}>
+          <g class={styles.horizontal}>
+            <Index
+              each={Array.from({
+                length: Math.floor(
+                  dimensions().height / (props.grid.y * timeline.zoom().y) + 2
+                ),
+              })}
+            >
+              {(_, y) => (
+                <line
+                  x1={0}
+                  x2={dimensions().width}
+                  y1={timeline.project(y * props.grid.y, 'y') + offset().y}
+                  y2={timeline.project(y * props.grid.y, 'y') + offset().y}
+                />
+              )}
+            </Index>
+          </g>
+          <g class={styles.vertical}>
+            <Index
+              each={Array.from({
+                length:
+                  Math.floor(
+                    dimensions().width / (props.grid.x * timeline.zoom().x)
+                  ) + 2,
+              })}
+            >
+              {(_, x) => (
+                <line
+                  x1={timeline.project(x * props.grid.x, 'x') + offset().x}
+                  x2={timeline.project(x * props.grid.x, 'x') + offset().x}
+                  y1={0}
+                  y2={dimensions().height}
+                />
+              )}
+            </Index>
+          </g>
+        </g>
+      )}
+    </Show>
+  )
 }
 
 /**********************************************************************************/
@@ -181,6 +247,10 @@ export interface TimelineProps extends ComponentProps<'div'> {
   onTimeChange?(time: number): void
   onZoomChange?(zoom: Vector): void
   paddingY?: number
+  grid?: {
+    x: number
+    y: number
+  }
 }
 
 export function createTimelineComponent({
@@ -232,18 +302,22 @@ export function createTimelineComponent({
       'onZoomChange',
       'children',
       'paddingY',
+      'grid',
     ])
 
-    const [height, setHeight] = createSignal<number>()
+    const [dimensions, setDimensions] = createSignal<{
+      width: number
+      height: number
+    }>()
     const [paddingMax, setPaddingMax] = createSignal(0)
     const [paddingMin, setPaddingMin] = createSignal(0)
 
     const zoom = whenMemo(
-      height,
-      (height) => ({
+      dimensions,
+      (dimensions) => ({
         x: sheet.zoomX(),
         y:
-          (height - config.paddingY * 2) /
+          (dimensions.height - config.paddingY * 2) /
           (config.max - config.min + paddingMax() + paddingMin()),
       }),
       { x: 1, y: 1 }
@@ -366,13 +440,16 @@ export function createTimelineComponent({
         value={{
           project,
           unproject,
+          dimensions,
+          zoom,
+          offset,
         }}
       >
         <div {...rest}>
           <svg
             ref={(element) => {
               function updateDomRect() {
-                setHeight(element.getBoundingClientRect().height)
+                setDimensions(element.getBoundingClientRect())
               }
               const observer = new ResizeObserver(updateDomRect)
               observer.observe(element)
@@ -423,6 +500,7 @@ export function createTimelineComponent({
               sheet.setPan((pan) => pan + e.deltaX)
             }}
           >
+            <Show when={config.grid}>{(grid) => <Grid grid={grid()} />}</Show>
             <path
               class={styles.path}
               d={d({
@@ -442,6 +520,7 @@ export function createTimelineComponent({
               )}
             </Show>
             <Indicator height={window.innerHeight} time={sheet.time()} />
+
             <For each={absoluteAnchors}>
               {(anchor, index) => {
                 const [position, controls] = anchor
