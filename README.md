@@ -1,24 +1,25 @@
 # ⌛ Solid Timeline
 
-https://github.com/user-attachments/assets/ae371575-535a-4e51-bc49-80b70639b7d7
+
+https://github.com/user-attachments/assets/bdcce682-098e-4e6b-8f9c-73c25f6a4f37
+
+
 
 ## Example
 
 This is the source code of the demo shown above.
 
 ```tsx
-import { createClock, createTimeline, Sheet } from 'solid-timeline'
 import { createSignal, onCleanup } from 'solid-js'
+import { createTimeline, Sheet } from 'solid-timeline'
+import { createClock } from 'solid-timeline/create-clock'
+import styles from './App.module.css'
 
 function Circle(props: { top: number; left: number }) {
   return (
     <div
+      class={styles.circle}
       style={{
-        position: 'fixed',
-        'border-radius': '50%',
-        background: 'blue',
-        height: '100px',
-        width: '100px',
         transform: `translate(calc(${props.left}px - 50%), calc(${props.top}px - 50%))`,
       }}
     />
@@ -40,26 +41,14 @@ function App() {
       [
         { x: 400, y: 300 },
         {
-          pre: { x: 0.5, y: 0 },
-          post: { x: 0.5, y: 0 },
+          pre: { x: 100, y: 0 },
+          post: { x: 100, y: 0 },
         },
       ],
       [
-        { x: 800, y: 300 },
+        { x: 800, y: 0 },
         {
-          pre: { x: 0.5, y: 0 },
-        },
-      ],
-      [
-        { x: 1200, y: 500 },
-        {
-          pre: { x: 0.5, y: 0 },
-        },
-      ],
-      [
-        { x: 1600, y: 750 },
-        {
-          pre: { x: 0.5, y: 0 },
+          pre: { x: 100, y: 0 },
         },
       ],
     ],
@@ -72,72 +61,68 @@ function App() {
       [
         { x: 600, y: 0 },
         {
-          pre: { x: 0.5, y: 0 },
+          pre: { x: 100, y: 0 },
         },
       ],
       [
         { x: 900, y: 500 },
         {
-          pre: { x: 0.5, y: 0 },
-          post: { x: 0.5, y: 0 },
+          pre: { x: 100, y: 0 },
+          post: { x: 100, y: 0 },
         },
       ],
       [{ x: 1200, y: 100 }],
       [
         { x: 1500, y: 750 },
         {
-          pre: { x: 0.5, y: 0 },
+          pre: { x: 100, y: 0 },
         },
       ],
     ],
   })
 
-  return (
-    <div style={{ overflow: 'hidden', width: '100vw', height: '100vh' }}>
-      <Circle
-        left={LeftTimeline.getValue(time())}
-        top={TopTimeline.getValue(time())}
-      />
-      <Sheet
-        time={time()}
-        style={{
-          display: 'flex',
-          'flex-direction': 'column',
-        }}
-        ref={(element) => {
-          function updateDomRect() {
-            setDomRect(element.getBoundingClientRect())
-          }
-          const observer = new ResizeObserver(updateDomRect)
-          observer.observe(element)
+  function onRef(element: HTMLDivElement) {
+    function updateDomRect() {
+      setDomRect(element.getBoundingClientRect())
+    }
+    const observer = new ResizeObserver(updateDomRect)
+    observer.observe(element)
+    updateDomRect()
 
-          updateDomRect()
-          clock.start()
-      
-          onCleanup(() => observer.disconnect())
-        }}
-      >
-        <div style={{ display: 'flex', 'flex-direction': 'row' }}>
-          <TopTimeline.Value>
+    clock.start()
+
+    onCleanup(() => observer.disconnect())
+  }
+
+  return (
+    <div class={styles.app}>
+      <Circle
+        top={TopTimeline.getValue(time())}
+        left={LeftTimeline.getValue(time())}
+      />
+      <Sheet time={time()} class={styles.sheet} ref={onRef}>
+        <div class={styles.timelineContainer}>
+          <TopTimeline.Value class={styles.value}>
             <TopTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
             <TopTimeline.Value.Button>+</TopTimeline.Value.Button>
           </TopTimeline.Value>
-          <LeftTimeline.Value>
+          <TopTimeline.Component
+            min={0}
+            max={window.innerHeight}
+            class={styles.timeline}
+          />
+        </div>
+        <div class={styles.timelineContainer}>
+          <LeftTimeline.Value class={styles.value}>
             <LeftTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
             <LeftTimeline.Value.Button>+</LeftTimeline.Value.Button>
           </LeftTimeline.Value>
+          <LeftTimeline.Component
+            min={0}
+            max={window.innerWidth}
+            class={styles.timeline}
+          />
         </div>
-
-        <TopTimeline.Component
-          min={0}
-          max={window.innerHeight}
-          style={{ height: '50px' }}
-        />
-        <LeftTimeline.Component
-          min={0}
-          max={window.innerWidth}
-          style={{ height: '50px' }}
-        />
       </Sheet>
     </div>
   )
