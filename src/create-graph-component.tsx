@@ -357,8 +357,8 @@ export function createGraphComponent({
     function isOutOfBounds(x: number) {
       const [firstPosition] = absoluteAnchors[0]
       const [lastPosition] = absoluteAnchors[absoluteAnchors.length - 1]
-      const presenceX = unproject(x, 'x')
-      return presenceX < firstPosition.x || presenceX > lastPosition.x
+
+      return x < firstPosition.x || x > lastPosition.x
     }
 
     function project(point: Vector | number): Vector
@@ -504,7 +504,7 @@ export function createGraphComponent({
               }
             }}
             onWheel={(e) => {
-              sheet.setPan((pan) => pan + e.deltaX)
+              sheet.setPan((pan) => pan - e.deltaX)
             }}
           >
             <Show when={config.grid}>{(grid) => <Grid grid={grid()} />}</Show>
