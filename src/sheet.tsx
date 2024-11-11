@@ -3,15 +3,14 @@ import {
   ComponentProps,
   createContext,
   createSignal,
-  mergeProps,
   onCleanup,
   onMount,
   Setter,
-  splitProps,
   useContext,
 } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { createWritable } from './utils/create-writable'
+import { processProps } from './utils/default-props'
 
 const SheetContext = createContext<{
   pan: Accessor<number>
@@ -44,8 +43,12 @@ export function Sheet(
     zoom?: number
   }
 ) {
-  const config = mergeProps({ time: 0, pan: 0, zoom: 1 }, props)
-  const [, rest] = splitProps(props, ['children'])
+  const [config, rest] = processProps(props, { time: 0, pan: 0, zoom: 1 }, [
+    'children',
+    'pan',
+    'zoom',
+    'time',
+  ])
   const [pan, setPan] = createWritable(() => config.pan)
   const [zoomX, setZoomX] = createWritable(() => config.zoom)
   const [time, setTime] = createWritable(() => config.time)
