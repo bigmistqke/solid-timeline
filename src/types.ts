@@ -14,11 +14,12 @@ export type CubicAnchor = PostAnchor | CenterAnchor | PreAnchor
 export type QuadraticBezierAnchor = [Vector, Controls]
 export type LinearBezierAnchor = [Vector]
 
-export type Anchor = [Vector, Controls?]
+export type InputAnchor = [Vector, Controls?]
+export type Anchor = [Vector, Controls]
+
 export type PreAnchor = [Vector, Controls<'pre'>]
 export type CenterAnchor = [Vector, Controls<'pre' | 'post'>]
 export type PostAnchor = [Vector, Controls<'post'>]
-export type Anchors = Array<Anchor>
 
 export type Segment = {
   range: number[]

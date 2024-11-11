@@ -6,7 +6,7 @@ import { createLookupMap } from './lib/create-lookup-map'
 import { DConfig, dFromAbsoluteAnchors } from './lib/d-from-anchors'
 import { getValueFromSegments } from './lib/get-value-from-segments'
 import { addVector, multiplyVector } from './lib/vector'
-import type { Anchor, Anchors, Segment, Vector } from './types'
+import type { Anchor, InputAnchor, Segment, Vector } from './types'
 import { createArrayProxy } from './utils/create-array-proxy'
 
 /**********************************************************************************/
@@ -19,10 +19,10 @@ export interface Api {
   absoluteAnchors: Array<Anchor>
   clampedAnchors: Array<Anchor>
   segments: Accessor<Array<Accessor<Segment>>>
-  anchors: Array<Anchor>
+  anchors: Array<InputAnchor>
   d(config?: DConfig): string
   getValue(time: number): number
-  setAnchors: SetStoreFunction<Array<Anchor>>
+  setAnchors: SetStoreFunction<Array<InputAnchor>>
   deleteAnchor(index: number): void
   addAnchor(time: number, value?: number): void
   getPairedAnchorPosition(
@@ -31,8 +31,8 @@ export interface Api {
   ): Vector | undefined
 }
 
-export function createTimeline(initial?: Anchors) {
-  const [anchors, setAnchors] = createStore<Anchors>(initial || [])
+export function createTimeline(initial?: Array<InputAnchor>) {
+  const [anchors, setAnchors] = createStore<Array<InputAnchor>>(initial || [])
 
   const absoluteAnchors = createArrayProxy(
     mapArray(
@@ -250,15 +250,15 @@ export function createTimeline(initial?: Anchors) {
 
   const api: Api = {
     absoluteAnchors,
-    segments,
-    clampedAnchors,
-    anchors,
     addAnchor,
+    anchors,
+    clampedAnchors,
     d,
     deleteAnchor,
-    getValue,
-    setAnchors,
     getPairedAnchorPosition,
+    getValue,
+    segments,
+    setAnchors,
   }
 
   return mergeProps(api, {

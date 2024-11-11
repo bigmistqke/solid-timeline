@@ -20,7 +20,6 @@ import {
   Path,
   Root,
 } from './graph-components'
-import { Merge } from './types'
 import { createWritable } from './utils/create-writable'
 import { processProps } from './utils/default-props'
 
@@ -38,6 +37,7 @@ interface SheetContext extends GraphComponents {
     shift: boolean
     alt: boolean
   }
+  graphComponents?: Partial<GraphComponents>
 }
 
 const sheetContext = createContext<SheetContext>()
@@ -50,20 +50,22 @@ export function useSheet() {
   return context
 }
 
-export interface SheetProps
-  extends Merge<ComponentProps<'div'>, Partial<GraphComponents>> {
+export interface SheetProps extends ComponentProps<'div'> {
   time?: number
   pan?: number
   zoom?: number
+  graphComponents?: Partial<GraphComponents>
 }
 
 export function Sheet(props: SheetProps) {
-  const [config, gridComponents, rest] = processProps(
-    props,
-    { time: 0, pan: 0, zoom: 1 },
-    ['children', 'pan', 'zoom', 'time'],
-    ['Anchor', 'Control', 'Grid', 'Handle', 'Indicator', 'Path', 'Root']
-  )
+  const [config, rest] = processProps(props, { time: 0, pan: 0, zoom: 1 }, [
+    'children',
+    'pan',
+    'zoom',
+    'time',
+    'graphComponents',
+  ])
+
   const [pan, setPan] = createWritable(() => config.pan)
   const [zoomX, setZoomX] = createWritable(() => config.zoom)
   const [time, setTime] = createWritable(() => config.time)
@@ -103,6 +105,7 @@ export function Sheet(props: SheetProps) {
 
   const sheet = mergeProps(
     { Path, Anchor, Indicator, Control, Handle, Grid, Root },
+    () => config.graphComponents,
     {
       pan,
       setPan,
@@ -113,8 +116,7 @@ export function Sheet(props: SheetProps) {
       isDraggingHandle,
       setIsDraggingHandle,
       modifiers,
-    },
-    gridComponents
+    }
   )
 
   return (

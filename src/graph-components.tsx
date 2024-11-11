@@ -1,7 +1,6 @@
 import clsx from 'clsx'
 import {
   ComponentProps,
-  For,
   Index,
   Show,
   createSignal,
@@ -13,7 +12,7 @@ import { divideVector, subtractVector } from './lib/vector'
 import { useSheet } from './sheet'
 import styles from './timeline.module.css'
 import { Vector } from './types'
-import { whenMemo } from './utils/once-every-when'
+import { every, whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
 
 export const graphComponentNames = [
@@ -24,7 +23,7 @@ export const graphComponentNames = [
   'Indicator',
   'Path',
   'Root',
-] as const
+] as const satisfies Array<keyof GraphComponents>
 
 export interface GraphComponents {
   Anchor: typeof Anchor
@@ -109,7 +108,7 @@ export function Grid(props: GridProps) {
 
 export interface HandleProps {
   position: Vector
-  onDragStart(event: MouseEvent): Promise<void>
+  onPointerDown(event: MouseEvent): void | Promise<void>
   onDblClick?(e: MouseEvent): void
   type: string
 }
@@ -119,16 +118,6 @@ export function Handle(props: HandleProps) {
   const sheet = useSheet()
 
   const [active, setActive] = createSignal(false)
-
-  async function onPointerDown(event: MouseEvent) {
-    setActive(true)
-    sheet.setIsDraggingHandle(true)
-
-    await props.onDragStart(event)
-
-    setActive(false)
-    sheet.setIsDraggingHandle(false)
-  }
 
   return (
     <g
@@ -143,13 +132,21 @@ export function Handle(props: HandleProps) {
         cy={graph.project(props.position, 'y')}
         class={styles.handleTrigger}
         fill="transparent"
-        onDblClick={(e) => {
+        onDblClick={function (event) {
           if (props.onDblClick) {
-            e.stopPropagation()
-            props.onDblClick(e)
+            event.stopPropagation()
+            props.onDblClick(event)
           }
         }}
-        onPointerDown={onPointerDown}
+        onPointerDown={async function (event: MouseEvent) {
+          setActive(true)
+          sheet.setIsDraggingHandle(true)
+
+          await props.onPointerDown(event)
+
+          setActive(false)
+          sheet.setIsDraggingHandle(false)
+        }}
         r="10"
       />
       <circle
@@ -169,38 +166,82 @@ export function Handle(props: HandleProps) {
 /*                                                                                */
 /**********************************************************************************/
 
-export type ControlProps = {
-  clampedControl: Vector
-  control: Vector
-  onDragStart(event: MouseEvent): Promise<void>
-  position: Vector
-  type: string
+export interface ControlProps {
+  index: number
+  type: 'pre' | 'post'
 }
 
 export function Control(props: ControlProps) {
   const graph = useGraph()
-  const [, rest] = splitProps(props, ['control', 'position'])
+  const sheet = useSheet()
+
+  const position = () => graph.project(graph.absoluteAnchors[props.index][0])
+  const controls = every(
+    () => graph.absoluteAnchors[props.index][1][props.type],
+    () => graph.clampedAnchors[props.index][1][props.type]
+  )
+
   return (
-    <g data-timeline-control={props.type}>
-      <g data-timeline-control-line={props.type} class={styles.controlLine}>
-        <line
-          data-timeline-control-line-clamped={props.type}
-          x1={graph.project(props.position, 'x')}
-          y1={graph.project(props.position, 'y')}
-          x2={graph.project(props.clampedControl, 'x')}
-          y2={graph.project(props.clampedControl, 'y')}
-        />
-        <line
-          data-timeline-control-line-unclamped={props.type}
-          stroke-dasharray="2px 2px"
-          x1={graph.project(props.clampedControl, 'x')}
-          y1={graph.project(props.clampedControl, 'y')}
-          x2={graph.project(props.control, 'x')}
-          y2={graph.project(props.control, 'y')}
-        />
-      </g>
-      <graph.Handle position={props.control} {...rest} />
-    </g>
+    <Show when={controls()}>
+      {(controls) => (
+        <g data-timeline-control={props.type}>
+          <g data-timeline-control-line={props.type} class={styles.controlLine}>
+            <line
+              data-timeline-control-line-clamped={props.type}
+              x1={position().x}
+              y1={position().y}
+              x2={graph.project(controls()[1], 'x')}
+              y2={graph.project(controls()[1], 'y')}
+            />
+            <line
+              data-timeline-control-line-unclamped={props.type}
+              stroke-dasharray="2px 2px"
+              x1={graph.project(controls()[1], 'x')}
+              y1={graph.project(controls()[1], 'y')}
+              x2={graph.project(controls()[0], 'x')}
+              y2={graph.project(controls()[0], 'y')}
+            />
+          </g>
+          <graph.Handle
+            position={controls()[0]}
+            onPointerDown={async function (event) {
+              const [, controls] = graph.absoluteAnchors[props.index]
+
+              const initialControl = { ...controls![props.type]! }
+              const pairedType = props.type === 'pre' ? 'post' : 'pre'
+
+              await pointerHelper(event, ({ delta }) => {
+                delta = divideVector(delta, graph.zoom())
+
+                const absoluteControl = subtractVector(initialControl, delta)
+                const control = graph.absoluteToRelativeControl({
+                  index: props.index,
+                  type: props.type,
+                  absoluteControl,
+                })
+                graph.setAnchors(props.index, 1, props.type, control)
+
+                // Symmetric dragging of paired control
+                if (
+                  sheet.modifiers.meta &&
+                  props.index !== graph.absoluteAnchors.length - 1 &&
+                  props.index !== 0
+                ) {
+                  console.log(props.index, graph.absoluteAnchors.length)
+                  graph.setAnchors(props.index, 1, pairedType, {
+                    x: control.x,
+                    y: control.y * -1,
+                  })
+                }
+              })
+
+              graph.updatePadding()
+            }}
+            {...props}
+          />
+        </g>
+      )}
+    </Show>
   )
 }
 
@@ -211,43 +252,48 @@ export function Control(props: ControlProps) {
 /**********************************************************************************/
 
 export interface AnchorProps {
-  onDeleteAnchor(): void
-  onControlDragStart(type: 'pre' | 'post', event: MouseEvent): Promise<void>
-  onPositionDragStart(event: MouseEvent): Promise<void>
-  position: Vector
-  post?: Vector
-  clampedPost?: Vector
-  pre?: Vector
-  clampedPre?: Vector
+  index: number
 }
 
 export function Anchor(props: AnchorProps) {
   const graph = useGraph()
+
+  const position = () => graph.absoluteAnchors[props.index][0]
+
   return (
     <g data-timeline-anchor>
-      <Show when={props.pre}>
-        <graph.Control
-          type="pre"
-          clampedControl={props.clampedPre!}
-          control={props.pre!}
-          onDragStart={(event) => props.onControlDragStart('pre', event)}
-          position={props.position}
-        />
-      </Show>
-      <Show when={props.post}>
-        <graph.Control
-          type="post"
-          clampedControl={props.clampedPost!}
-          control={props.post!}
-          onDragStart={(event) => props.onControlDragStart('post', event)}
-          position={props.position}
-        />
-      </Show>
+      <graph.Control type="pre" index={props.index} />
+      <graph.Control type="post" index={props.index} />
       <graph.Handle
         type="position"
-        position={props.position}
-        onDragStart={(event) => props.onPositionDragStart(event)}
-        onDblClick={props.onDeleteAnchor}
+        position={position()}
+        onDblClick={() => graph.deleteAnchor(props.index)}
+        onPointerDown={async function (event) {
+          const initialPosition = { ...graph.absoluteAnchors[props.index][0] }
+
+          const pre = graph.getPairedAnchorPosition('pre', props.index)
+          const post = graph.getPairedAnchorPosition('post', props.index)
+
+          await pointerHelper(event, ({ delta }) => {
+            delta = divideVector(delta, graph.zoom())
+
+            const position = subtractVector(initialPosition, delta)
+
+            // Clamp position with the pre-anchor's position
+            if (pre && position.x - 1 < pre.x) {
+              position.x = pre.x + 1
+            }
+
+            // Clamp position with the pre-anchor's position
+            if (post && position.x + 1 > post.x) {
+              position.x = post.x - 1
+            }
+
+            graph.setAnchors(props.index, 0, position)
+          })
+
+          graph.updatePadding()
+        }}
       />
     </g>
   )
@@ -260,12 +306,10 @@ export function Anchor(props: AnchorProps) {
 /**********************************************************************************/
 
 export interface Indicator {
-  height: number
-  time: number
-  value?: number
   class?: string
-  onPointerDown?: (event: MouseEvent) => void
-  type: string
+  position: Vector
+  name: string
+  onPointerDown?(event: MouseEvent): void
 }
 
 export function Indicator(props: Indicator) {
@@ -273,21 +317,21 @@ export function Indicator(props: Indicator) {
 
   return (
     <g
-      data-timeline-indicator={props.type}
+      data-timeline-indicator={props.name}
       class={clsx(styles.indicator, props.class)}
       onPointerDown={props.onPointerDown}
     >
       <line
-        data-timeline-indicator-line={props.type}
+        data-timeline-indicator-line={props.name}
         y1={0}
-        y2={props.height}
-        x1={graph.project(props.time, 'x')}
-        x2={graph.project(props.time, 'x')}
+        y2={graph.dimensions()?.height}
+        x1={graph.project(props.position.x, 'x')}
+        x2={graph.project(props.position.x, 'x')}
       />
       <circle
-        data-timeline-indicator-circle={props.type}
-        cx={graph.project(props.time, 'x')}
-        cy={graph.project(props.value || graph.getValue(props.time), 'y')!}
+        data-timeline-indicator-circle={props.name}
+        cx={graph.project(props.position.x, 'x')}
+        cy={graph.project(props.position.y, 'y')!}
         r={3}
       />
     </g>
@@ -400,94 +444,22 @@ export function Root(props: RootProps) {
         <Show when={!sheet.isDraggingHandle() && presence()}>
           {(presence) => (
             <graph.Indicator
-              height={window.innerHeight}
-              time={presence().x}
-              value={presence().y}
+              position={presence()}
               class={styles.presence}
-              type="cursor"
+              name="cursor"
             />
           )}
         </Show>
         <graph.Indicator
-          height={window.innerHeight}
-          time={sheet.time()}
-          type="time"
-        />
-        <For each={graph.absoluteAnchors}>
-          {(anchor, index) => {
-            const [position, controls] = anchor
-            return (
-              <graph.Anchor
-                position={position}
-                pre={controls?.pre}
-                post={controls?.post}
-                clampedPre={graph.clampedAnchors[index()][1]?.pre}
-                clampedPost={graph.clampedAnchors[index()][1]?.post}
-                onDeleteAnchor={() => graph.deleteAnchor(index())}
-                onControlDragStart={async function (type, event) {
-                  const initialControl = { ...controls![type]! }
-                  const pairedType = type === 'pre' ? 'post' : 'pre'
-
-                  await pointerHelper(event, ({ delta }) => {
-                    delta = divideVector(delta, graph.zoom())
-
-                    const absoluteControl = subtractVector(
-                      initialControl,
-                      delta
-                    )
-                    const control = graph.absoluteToRelativeControl({
-                      index: index(),
-                      type,
-                      absoluteControl,
-                    })
-                    graph.setAnchors(index(), 1, type, control)
-
-                    // Symmetric dragging of paired control
-                    if (
-                      sheet.modifiers.meta &&
-                      index() !== graph.absoluteAnchors.length - 1 &&
-                      index() !== 0
-                    ) {
-                      console.log(index(), graph.absoluteAnchors.length)
-                      graph.setAnchors(index(), 1, pairedType, {
-                        x: control.x,
-                        y: control.y * -1,
-                      })
-                    }
-                  })
-
-                  graph.updatePadding()
-                }}
-                onPositionDragStart={async function (event) {
-                  const initialPosition = { ...anchor[0] }
-
-                  const pre = graph.getPairedAnchorPosition('pre', index())
-                  const post = graph.getPairedAnchorPosition('post', index())
-
-                  await pointerHelper(event, ({ delta }) => {
-                    delta = divideVector(delta, graph.zoom())
-
-                    const position = subtractVector(initialPosition, delta)
-
-                    // Clamp position with the pre-anchor's position
-                    if (pre && position.x - 1 < pre.x) {
-                      position.x = pre.x + 1
-                    }
-
-                    // Clamp position with the pre-anchor's position
-                    if (post && position.x + 1 > post.x) {
-                      position.x = post.x - 1
-                    }
-
-                    graph.setAnchors(index(), 0, position)
-                  })
-
-                  graph.updatePadding()
-                }}
-              />
-            )
+          position={{
+            x: sheet.time(),
+            y: graph.getValue(sheet.time()),
           }}
-        </For>
+          name="time"
+        />
+        <Index each={graph.anchors}>
+          {(_, index) => <graph.Anchor index={index} />}
+        </Index>
         {props.children}
       </svg>
     </div>
