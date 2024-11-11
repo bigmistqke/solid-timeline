@@ -100,23 +100,14 @@ function App() {
         }}
         ref={onRef}
       >
-        <div style={{ display: 'flex', 'flex-direction': 'row' }}>
-          <TopTimeline.Value>
-            <TopTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
-            <TopTimeline.Value.Button>+</TopTimeline.Value.Button>
-          </TopTimeline.Value>
-          <LeftTimeline.Value>
-            <LeftTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
-            <LeftTimeline.Value.Button>+</LeftTimeline.Value.Button>
-          </LeftTimeline.Value>
-        </div>
-
         <TopTimeline.Component
           min={0}
           max={window.innerHeight}
           style={{
             height: '50px',
-            background: 'lightgrey',
+            background: '#ededed',
+            'border-top': '1px solid black',
+            'border-bottom': '1px solid black',
             resize: 'vertical',
             overflow: 'hidden',
           }}
@@ -126,11 +117,27 @@ function App() {
           max={window.innerWidth}
           style={{
             height: '50px',
-            background: 'lightgrey',
+            background: '#ededed',
+            'border-bottom': '1px solid black',
             resize: 'vertical',
             overflow: 'hidden',
           }}
         />
+        <div
+          style={{
+            display: 'flex',
+            'flex-direction': 'column',
+          }}
+        >
+          <TopTimeline.Value>
+            <TopTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
+            <TopTimeline.Value.Button>+</TopTimeline.Value.Button>
+          </TopTimeline.Value>
+          <LeftTimeline.Value>
+            <LeftTimeline.Value.Input decimals={2} style={{ width: '75px' }} />
+            <LeftTimeline.Value.Button>+</LeftTimeline.Value.Button>
+          </LeftTimeline.Value>
+        </div>
       </Sheet>
     </div>
   )
