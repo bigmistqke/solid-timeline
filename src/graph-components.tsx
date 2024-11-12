@@ -390,7 +390,7 @@ export function Root(props: RootProps) {
     }
     return {
       x: cursor.x,
-      y: graph.getValue(cursor.x),
+      y: graph.query(cursor.x),
     }
   })
 
@@ -482,7 +482,7 @@ export function Root(props: RootProps) {
         <graph.Indicator
           position={{
             x: sheet.time(),
-            y: graph.getValue(sheet.time()),
+            y: graph.query(sheet.time()),
           }}
           name="time"
         />

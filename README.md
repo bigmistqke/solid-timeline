@@ -1,9 +1,6 @@
 # ⌛ Solid Timeline
 
-
 https://github.com/user-attachments/assets/bdcce682-098e-4e6b-8f9c-73c25f6a4f37
-
-
 
 ## Example
 
@@ -97,8 +94,8 @@ function App() {
   return (
     <div class={styles.app}>
       <Circle
-        top={TopTimeline.getValue(time())}
-        left={LeftTimeline.getValue(time())}
+        top={TopTimeline.query(time())}
+        left={LeftTimeline.query(time())}
       />
       <Sheet time={time()} class={styles.sheet} ref={onRef}>
         <div class={styles.timelineContainer}>
@@ -130,4 +127,3 @@ function App() {
 
 export default App
 ```
-

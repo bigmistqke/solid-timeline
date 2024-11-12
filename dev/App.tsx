@@ -75,8 +75,8 @@ function App() {
   return (
     <div class={styles.app}>
       <Circle
-        top={TopTimeline.getValue(time())}
-        left={LeftTimeline.getValue(time())}
+        top={TopTimeline.query(time())}
+        left={LeftTimeline.query(time())}
       />
       <Sheet time={time()} class={styles.sheet}>
         <div class={styles.timelineContainer}>

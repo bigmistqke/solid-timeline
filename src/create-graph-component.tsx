@@ -32,7 +32,7 @@ interface GraphContext extends Merge<Api, GraphComponents> {
   dimensions: Accessor<{ width: number; height: number } | undefined>
   zoom: Accessor<Vector>
   offset: Accessor<Vector>
-  getValue(time: number): number
+  query(time: number): number
   updateOverflow(): void
   setDimensions(dimensions: { width: number; height: number }): void
   isOutOfBounds(x: number): boolean

@@ -21,10 +21,10 @@ const useValue = () => {
   return context
 }
 
-export function createValueComponent({ addAnchor, getValue }: Api) {
+export function createValueComponent({ addAnchor, query }: Api) {
   function Value(props: ComponentProps<'div'>) {
     const { time } = useSheet()
-    const [value, setValue] = createWritable(() => getValue(time()))
+    const [value, setValue] = createWritable(() => query(time()))
 
     return (
       <ValueContext.Provider value={{ value, setValue }}>

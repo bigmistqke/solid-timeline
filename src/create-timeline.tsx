@@ -26,7 +26,7 @@ export interface Api {
   segments: Accessor<Array<Accessor<Segment>>>
   anchors: Array<InputAnchor>
   d(config?: DConfig): string
-  getValue(time: number): number
+  query(time: number): number
   setAnchors: SetStoreFunction<Array<InputAnchor>>
   deleteAnchor(index: number): void
   addAnchor(time: number, value?: number): void
@@ -263,7 +263,7 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     d,
     deleteAnchor,
     getPairedAnchorPosition,
-    getValue,
+    query: getValue,
     segments,
     setAnchors,
   }
