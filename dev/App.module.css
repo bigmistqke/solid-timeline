@@ -12,20 +12,22 @@
   height: 100%;
 }
 
-.value {
-  border-right: 1px solid black;
-  padding: 5px;
-  user-select: none;
-}
-
 .timelineContainer {
   display: flex;
+  position: relative;
   flex: 1;
   border-bottom: 1px solid black;
   background: var(--background);
   width: 100%;
   overflow: hidden;
   resize: vertical;
+}
+
+.value {
+  position: absolute;
+  border-right: 1px solid black;
+  padding: 5px;
+  user-select: none;
 }
 
 .timeline {

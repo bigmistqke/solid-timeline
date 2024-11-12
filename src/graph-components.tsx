@@ -57,7 +57,7 @@ export function Grid(props: GridProps) {
     <Show when={graph.dimensions()}>
       {(dimensions) => (
         <g data-timeline-grid class={styles.grid} stroke="lightgrey">
-          <g data-timeline-grid-horizontal>
+          <g data-timeline-grid-horizontal style={graph.offsetStyle('y')}>
             <Index
               each={Array.from({
                 length: Math.floor(
@@ -75,7 +75,7 @@ export function Grid(props: GridProps) {
               )}
             </Index>
           </g>
-          <g data-timeline-grid-vertical>
+          <g data-timeline-grid-vertical style={graph.offsetStyle('x')}>
             <Index
               each={Array.from({
                 length:
@@ -332,13 +332,15 @@ export function Indicator(props: Indicator) {
         data-timeline-indicator-line={props.name}
         y1={0}
         y2={graph.dimensions()?.height}
-        x1={graph.project(props.position.x, 'x')}
-        x2={graph.project(props.position.x, 'x')}
+        x1={graph.project(props.position, 'x')}
+        x2={graph.project(props.position, 'x')}
+        style={graph.offsetStyle('x')}
       />
       <circle
+        style={graph.offsetStyle()}
         data-timeline-indicator-circle={props.name}
-        cx={graph.project(props.position.x, 'x')}
-        cy={graph.project(props.position.y, 'y')!}
+        cx={graph.project(props.position, 'x')}
+        cy={graph.project(props.position, 'y')}
         r={3}
       />
     </g>
@@ -398,17 +400,17 @@ export function Root(props: RootProps) {
     const x = sheet.pan()
     await pointerHelper(event, ({ delta, event }) => {
       sheet.setPan(x - delta.x / graph.zoom().x)
-      setCursor((presence) => ({
-        ...presence!,
-        x: graph.unproject(event.offsetX, 'x'),
+      setCursor((cursor) => ({
+        ...cursor!,
+        x: graph.unproject(event.offsetX - graph.offset().x, 'x'),
       }))
     })
   }
   function onPointerMove(event: MouseEvent) {
     setCursor(
       graph.unproject({
-        x: event.offsetX,
-        y: event.offsetY,
+        x: event.offsetX - graph.offset().x,
+        y: event.offsetY - graph.offset().y,
       })
     )
   }
@@ -427,6 +429,10 @@ export function Root(props: RootProps) {
 
   function onWheel(event: WheelEvent) {
     sheet.setPan((pan) => pan - event.deltaX)
+    setCursor((cursor) => ({
+      ...cursor!,
+      x: graph.unproject(event.offsetX - graph.offset().x, 'x'),
+    }))
   }
 
   return (
@@ -456,7 +462,6 @@ export function Root(props: RootProps) {
         onWheel={onWheel}
       >
         <Show when={config.grid}>{(grid) => <Grid grid={grid()} />}</Show>
-        <graph.Path />
         <Show when={!sheet.isDraggingHandle() && presence()}>
           {(presence) => (
             <graph.Indicator
@@ -473,10 +478,14 @@ export function Root(props: RootProps) {
           }}
           name="time"
         />
-        <Index each={graph.anchors}>
-          {(_, index) => <graph.Anchor index={index} />}
-        </Index>
-        {props.children}
+        <g style={graph.offsetStyle()}>
+          <graph.Path />
+
+          <Index each={graph.anchors}>
+            {(_, index) => <graph.Anchor index={index} />}
+          </Index>
+          {props.children}
+        </g>
       </svg>
     </div>
   )

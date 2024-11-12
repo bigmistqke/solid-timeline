@@ -41,6 +41,7 @@ interface GraphContext extends Merge<Api, GraphComponents> {
   }): Vector
   setDimensions(dimensions: { width: number; height: number }): void
   isOutOfBounds(x: number): boolean
+  offsetStyle(axis?: 'x' | 'y'): { transform: string }
 }
 
 const graphContext = createContext<GraphContext>()
@@ -129,7 +130,7 @@ export function createGraphComponent(api: Api) {
       }
 
       const value = typeof point === 'object' ? point[axis] : point
-      return value * zoom()[axis] + offset()[axis]
+      return value * zoom()[axis]
     }
 
     function unproject(point: Vector): Vector
@@ -146,7 +147,7 @@ export function createGraphComponent(api: Api) {
       }
 
       const value = typeof point === 'object' ? point[axis] : point
-      return (value - offset()[axis]) / zoom()[axis]
+      return value / zoom()[axis]
     }
 
     function absoluteToRelativeControl({
@@ -198,7 +199,19 @@ export function createGraphComponent(api: Api) {
     }
 
     function d(config?: DConfig) {
-      return api.d(config ?? { zoom: zoom(), offset: offset() })
+      return api.d(config ?? { zoom: zoom() })
+    }
+
+    function offsetStyle(axis?: 'x' | 'y') {
+      if (!axis) {
+        return {
+          transform: `translate3d(${offset().x}px, ${offset().y}px, 0)`,
+        }
+      }
+      if (axis === 'x') {
+        return { transform: `translateX(${offset().x}px)` }
+      }
+      return { transform: `translateY(${offset().y}px)` }
     }
 
     createEffect(() => config.onZoomChange?.(zoom()))
@@ -215,6 +228,7 @@ export function createGraphComponent(api: Api) {
       absoluteToRelativeControl,
       isOutOfBounds,
       setDimensions,
+      offsetStyle,
     })
 
     return (
