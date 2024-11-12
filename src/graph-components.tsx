@@ -462,6 +462,13 @@ export function Root(props: RootProps) {
         onWheel={onWheel}
       >
         <Show when={config.grid}>{(grid) => <Grid grid={grid()} />}</Show>
+        <g style={graph.offsetStyle()}>
+          <graph.Path />
+          <Index each={graph.anchors}>
+            {(_, index) => <graph.Anchor index={index} />}
+          </Index>
+          {props.children}
+        </g>
         <Show when={!sheet.isDraggingHandle() && presence()}>
           {(presence) => (
             <graph.Indicator
@@ -478,14 +485,6 @@ export function Root(props: RootProps) {
           }}
           name="time"
         />
-        <g style={graph.offsetStyle()}>
-          <graph.Path />
-
-          <Index each={graph.anchors}>
-            {(_, index) => <graph.Anchor index={index} />}
-          </Index>
-          {props.children}
-        </g>
       </svg>
     </div>
   )
