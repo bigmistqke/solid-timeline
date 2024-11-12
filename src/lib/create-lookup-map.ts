@@ -11,7 +11,7 @@ export function createLookupMap(
   if (isPostAnchor(start) && isPreAnchor(end)) {
     return createCubicLookupMap(start, end, amount)
   } else if (!isPostAnchor(start) && !isPreAnchor(end)) {
-    return createLinearLookupMap(start, end, amount)
+    return [start[0], end[0]]
   } else {
     return createQuadraticLookupMap(start, end, amount)
   }
@@ -27,25 +27,6 @@ export const createCubicLookupMap = (
     3 * Math.pow(1 - t, 2) * t * post!.clamped[type] +
     3 * (1 - t) * Math.pow(t, 2) * pre!.clamped[type] +
     Math.pow(t, 3) * end[type]
-
-  const res = []
-
-  for (let t = 0; t <= amount; t++) {
-    const valX = step('x', t / amount)
-    const valY = step('y', t / amount)
-    res.push({ x: valX, y: valY })
-  }
-
-  return res
-}
-
-const createLinearLookupMap = (
-  [start]: ProcessedAnchor,
-  [end]: ProcessedAnchor,
-  amount = 60
-): Array<Vector> => {
-  const step = (type: 'x' | 'y', t: number) =>
-    (1 - t) * start[type] + t * end[type]
 
   const res = []
 
