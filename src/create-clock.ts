@@ -6,6 +6,7 @@ export function createClock(options?: {
   max?: number
   min?: number
   speed?: number
+  autostart?: boolean
 }) {
   const config = defaultProps(options || {}, {
     time: 0,
@@ -40,18 +41,21 @@ export function createClock(options?: {
     })
   }
 
-  return [
-    time,
-    {
-      set: setTime,
-      start: () => {
-        previous = performance.now()
-        shouldLoop = true
-        loop(performance.now())
-      },
-      stop: () => {
-        shouldLoop = false
-      },
+  const clock = {
+    set: setTime,
+    start: () => {
+      previous = performance.now()
+      shouldLoop = true
+      loop(performance.now())
     },
-  ] as const
+    stop: () => {
+      shouldLoop = false
+    },
+  }
+
+  if (options?.autostart) {
+    clock.start()
+  }
+
+  return [time, clock] as const
 }
