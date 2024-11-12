@@ -159,12 +159,12 @@ export function createGraphComponent(api: Api) {
         top = Math.max(top, topOverflowFromVector(position))
         bottom = Math.max(bottom, bottomOverflowFromVector(position))
         if (pre) {
-          top = Math.max(top, topOverflowFromVector(pre.absolute))
-          bottom = Math.max(bottom, bottomOverflowFromVector(pre.absolute))
+          top = Math.max(top, topOverflowFromVector(pre.unclamped))
+          bottom = Math.max(bottom, bottomOverflowFromVector(pre.unclamped))
         }
         if (post) {
-          top = Math.max(top, topOverflowFromVector(post.absolute))
-          bottom = Math.max(bottom, bottomOverflowFromVector(post.absolute))
+          top = Math.max(top, topOverflowFromVector(post.unclamped))
+          bottom = Math.max(bottom, bottomOverflowFromVector(post.unclamped))
         }
       })
 

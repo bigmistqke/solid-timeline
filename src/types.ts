@@ -5,8 +5,8 @@ export type Vector = {
 
 export type Controls = { pre: Vector; post: Vector }
 export type ProcessedControls = {
-  pre: { absolute: Vector; clamped: Vector }
-  post: { absolute: Vector; clamped: Vector }
+  pre: { unclamped: Vector; clamped: Vector }
+  post: { unclamped: Vector; clamped: Vector }
 }
 
 export type InputAnchor = [Vector, Partial<Controls>?]

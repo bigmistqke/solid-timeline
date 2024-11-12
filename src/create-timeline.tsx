@@ -10,6 +10,7 @@ import type {
   AbsoluteAnchor,
   InputAnchor,
   ProcessedAnchor,
+  ProcessedControls,
   Segment,
   Vector,
 } from './types'
@@ -123,7 +124,7 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     type: 'pre' | 'post',
     index: number,
     [position, controls]: AbsoluteAnchor
-  ): { absolute: Vector; clamped: Vector } | undefined {
+  ): ProcessedControls[keyof ProcessedControls] | undefined {
     const control = controls?.[type]
 
     if (!control) {
@@ -143,12 +144,12 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     const clampedX = Math.max(min.x, Math.min(max.x, control.x))
 
     if (clampedX === control.x) {
-      return { absolute: control, clamped: control }
+      return { unclamped: control, clamped: control }
     } else {
       const ratio = (position.x - clampedX) / (position.x - control.x)
       const clampedY = (control.y - position.y) * ratio + position.y
       return {
-        absolute: control,
+        unclamped: control,
         clamped: {
           x: clampedX,
           y: clampedY,
@@ -161,11 +162,11 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     return dFromProcessedAnchors(processedAnchors, config)
   }
 
-  function getValue(time: number) {
+  function query(time: number) {
     return getValueFromSegments(segments(), time)
   }
 
-  function addAnchor(time: number, value = getValue(time)) {
+  function addAnchor(time: number, value = query(time)) {
     setAnchors(
       produce((anchors) => {
         let index = anchors.findIndex(([anchor]) => {
@@ -263,7 +264,7 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     d,
     deleteAnchor,
     getPairedAnchorPosition,
-    query: getValue,
+    query,
     segments,
     setAnchors,
   }

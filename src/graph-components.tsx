@@ -187,7 +187,7 @@ export function Control(props: ControlProps) {
     <Show when={controls()}>
       {(controls) => {
         async function onPointerDown(event: MouseEvent) {
-          const initialControl = { ...controls().absolute }
+          const initialControl = { ...controls().unclamped }
           const pairedType = props.type === 'pre' ? 'post' : 'pre'
 
           await pointerHelper(event, ({ delta }) => {
@@ -235,12 +235,12 @@ export function Control(props: ControlProps) {
                 stroke-dasharray="2px 2px"
                 x1={graph.project(controls().clamped, 'x')}
                 y1={graph.project(controls().clamped, 'y')}
-                x2={graph.project(controls().absolute, 'x')}
-                y2={graph.project(controls().absolute, 'y')}
+                x2={graph.project(controls().unclamped, 'x')}
+                y2={graph.project(controls().unclamped, 'y')}
               />
             </g>
             <graph.Handle
-              position={controls().absolute}
+              position={controls().unclamped}
               onPointerDown={onPointerDown}
               {...props}
             />
