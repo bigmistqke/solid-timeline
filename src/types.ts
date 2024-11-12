@@ -3,23 +3,15 @@ export type Vector = {
   y: number
 }
 
-type BareControls = { pre: Vector; post: Vector }
-export type Controls<
-  TRequired extends keyof BareControls | undefined = undefined
-> = TRequired extends keyof BareControls
-  ? RequireKeys<Partial<BareControls>, TRequired>
-  : Partial<BareControls>
+export type Controls = { pre: Vector; post: Vector }
+export type ProcessedControls = {
+  pre: { absolute: Vector; clamped: Vector }
+  post: { absolute: Vector; clamped: Vector }
+}
 
-export type CubicAnchor = PostAnchor | CenterAnchor | PreAnchor
-export type QuadraticBezierAnchor = [Vector, Controls]
-export type LinearBezierAnchor = [Vector]
-
-export type InputAnchor = [Vector, Controls?]
-export type Anchor = [Vector, Controls]
-
-export type PreAnchor = [Vector, Controls<'pre'>]
-export type CenterAnchor = [Vector, Controls<'pre' | 'post'>]
-export type PostAnchor = [Vector, Controls<'post'>]
+export type InputAnchor = [Vector, Partial<Controls>?]
+export type AbsoluteAnchor = [Vector, Partial<Controls>]
+export type ProcessedAnchor = [Vector, Partial<ProcessedControls>]
 
 export type Segment = {
   range: number[]

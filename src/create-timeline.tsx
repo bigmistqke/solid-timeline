@@ -3,10 +3,16 @@ import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import { createGraphComponent } from './create-graph-component'
 import { createValueComponent } from './create-value-component'
 import { createLookupMap } from './lib/create-lookup-map'
-import { DConfig, dFromAbsoluteAnchors } from './lib/d-from-anchors'
+import { DConfig, dFromProcessedAnchors } from './lib/d-from-processed-anchors'
 import { getValueFromSegments } from './lib/get-value-from-segments'
 import { addVector, multiplyVector } from './lib/vector'
-import type { Anchor, InputAnchor, Segment, Vector } from './types'
+import type {
+  AbsoluteAnchor,
+  InputAnchor,
+  ProcessedAnchor,
+  Segment,
+  Vector,
+} from './types'
 import { createArrayProxy } from './utils/create-array-proxy'
 
 /**********************************************************************************/
@@ -16,8 +22,7 @@ import { createArrayProxy } from './utils/create-array-proxy'
 /**********************************************************************************/
 
 export interface Api {
-  absoluteAnchors: Array<Anchor>
-  clampedAnchors: Array<Anchor>
+  processedAnchors: Array<ProcessedAnchor>
   segments: Accessor<Array<Accessor<Segment>>>
   anchors: Array<InputAnchor>
   d(config?: DConfig): string
@@ -37,7 +42,7 @@ export function createTimeline(initial?: Array<InputAnchor>) {
   const absoluteAnchors = createArrayProxy(
     mapArray(
       () => anchors,
-      (anchor): Anchor => {
+      (anchor): AbsoluteAnchor => {
         const pre = createMemo(() =>
           anchor[1]?.pre
             ? addVector(anchor[0], multiplyVector(anchor[1].pre, { x: -1 }))
@@ -62,12 +67,12 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     )
   )
 
-  const clampedAnchors = createArrayProxy(
+  const processedAnchors = createArrayProxy(
     mapArray(
       () => absoluteAnchors,
-      (anchor, index): Anchor => {
-        const pre = createMemo(() => clampControl('pre', index(), anchor))
-        const post = createMemo(() => clampControl('post', index(), anchor))
+      (anchor, index): ProcessedAnchor => {
+        const pre = createMemo(() => processControl('pre', index(), anchor))
+        const post = createMemo(() => processControl('post', index(), anchor))
         return [
           anchor[0],
           {
@@ -84,10 +89,10 @@ export function createTimeline(initial?: Array<InputAnchor>) {
   )
 
   const mapArraySegments = mapArray(
-    () => clampedAnchors,
+    () => processedAnchors,
     (anchor, index) =>
       createMemo(() => {
-        const next = clampedAnchors[index() + 1]
+        const next = processedAnchors[index() + 1]
         return next
           ? {
               range: [anchor[0].x, next[0].x],
@@ -114,11 +119,11 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     return anchors[type === 'pre' ? index - 1 : index + 1][0]
   }
 
-  function clampControl(
+  function processControl(
     type: 'pre' | 'post',
     index: number,
-    [position, controls]: Anchor
-  ) {
+    [position, controls]: AbsoluteAnchor
+  ): { absolute: Vector; clamped: Vector } | undefined {
     const control = controls?.[type]
 
     if (!control) {
@@ -138,19 +143,22 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     const clampedX = Math.max(min.x, Math.min(max.x, control.x))
 
     if (clampedX === control.x) {
-      return control
+      return { absolute: control, clamped: control }
     } else {
       const ratio = (position.x - clampedX) / (position.x - control.x)
       const clampedY = (control.y - position.y) * ratio + position.y
       return {
-        x: clampedX,
-        y: clampedY,
+        absolute: control,
+        clamped: {
+          x: clampedX,
+          y: clampedY,
+        },
       }
     }
   }
 
   function d(config?: DConfig) {
-    return dFromAbsoluteAnchors(clampedAnchors, config)
+    return dFromProcessedAnchors(processedAnchors, config)
   }
 
   function getValue(time: number) {
@@ -249,10 +257,9 @@ export function createTimeline(initial?: Array<InputAnchor>) {
   }
 
   const api: Api = {
-    absoluteAnchors,
     addAnchor,
     anchors,
-    clampedAnchors,
+    processedAnchors,
     d,
     deleteAnchor,
     getPairedAnchorPosition,

@@ -12,7 +12,7 @@ import { divideVector, subtractVector } from './lib/vector'
 import { useSheet } from './sheet'
 import styles from './timeline.module.css'
 import { Vector } from './types'
-import { every, whenMemo } from './utils/once-every-when'
+import { whenMemo } from './utils/once-every-when'
 import { pointerHelper } from './utils/pointer-helper'
 
 export const graphComponentNames = [
@@ -179,74 +179,73 @@ export function Control(props: ControlProps) {
   const graph = useGraph()
   const sheet = useSheet()
 
-  const position = () => graph.project(graph.absoluteAnchors[props.index][0])
-  const controls = every(
-    () => graph.absoluteAnchors[props.index][1][props.type],
-    () => graph.clampedAnchors[props.index][1][props.type]
-  )
-
-  async function onPointerDown(event: MouseEvent) {
-    const [, controls] = graph.absoluteAnchors[props.index]
-
-    const initialControl = { ...controls![props.type]! }
-    const pairedType = props.type === 'pre' ? 'post' : 'pre'
-
-    await pointerHelper(event, ({ delta }) => {
-      delta = divideVector(delta, graph.zoom())
-
-      const absoluteControl = subtractVector(initialControl, delta)
-      const control = graph.absoluteToRelativeControl({
-        index: props.index,
-        type: props.type,
-        absoluteControl,
-      })
-      graph.setAnchors(props.index, 1, props.type, control)
-
-      // Symmetric dragging of paired control
-      if (
-        sheet.modifiers.meta &&
-        props.index !== graph.absoluteAnchors.length - 1 &&
-        props.index !== 0
-      ) {
-        console.log(props.index, graph.absoluteAnchors.length)
-        graph.setAnchors(props.index, 1, pairedType, {
-          x: control.x,
-          y: control.y * -1,
-        })
-      }
-    })
-
-    graph.updatePadding()
-  }
+  const position = () => graph.anchors[props.index][0]
+  const controls = () => graph.processedAnchors[props.index][1][props.type]
 
   return (
     <Show when={controls()}>
-      {(controls) => (
-        <g data-timeline-control={props.type}>
-          <g data-timeline-control-line={props.type} class={styles.controlLine}>
-            <line
-              data-timeline-control-line-clamped={props.type}
-              x1={position().x}
-              y1={position().y}
-              x2={graph.project(controls()[1], 'x')}
-              y2={graph.project(controls()[1], 'y')}
-            />
-            <line
-              data-timeline-control-line-unclamped={props.type}
-              stroke-dasharray="2px 2px"
-              x1={graph.project(controls()[1], 'x')}
-              y1={graph.project(controls()[1], 'y')}
-              x2={graph.project(controls()[0], 'x')}
-              y2={graph.project(controls()[0], 'y')}
+      {(controls) => {
+        async function onPointerDown(event: MouseEvent) {
+          const initialControl = { ...controls().absolute }
+          const pairedType = props.type === 'pre' ? 'post' : 'pre'
+
+          await pointerHelper(event, ({ delta }) => {
+            delta = divideVector(delta, graph.zoom())
+
+            const absoluteControl = subtractVector(initialControl, delta)
+            const control = graph.absoluteToRelativeControl({
+              index: props.index,
+              type: props.type,
+              absoluteControl,
+            })
+            graph.setAnchors(props.index, 1, props.type, control)
+
+            // Symmetric dragging of paired control
+            if (
+              sheet.modifiers.meta &&
+              props.index !== graph.anchors.length - 1 &&
+              props.index !== 0
+            ) {
+              graph.setAnchors(props.index, 1, pairedType, {
+                x: control.x,
+                y: control.y * -1,
+              })
+            }
+          })
+
+          graph.updatePadding()
+        }
+
+        return (
+          <g data-timeline-control={props.type}>
+            <g
+              data-timeline-control-line={props.type}
+              class={styles.controlLine}
+            >
+              <line
+                data-timeline-control-line-clamped={props.type}
+                x1={graph.project(position().x, 'x')}
+                y1={graph.project(position().y, 'y')}
+                x2={graph.project(controls().clamped, 'x')}
+                y2={graph.project(controls().clamped, 'y')}
+              />
+              <line
+                data-timeline-control-line-unclamped={props.type}
+                stroke-dasharray="2px 2px"
+                x1={graph.project(controls().clamped, 'x')}
+                y1={graph.project(controls().clamped, 'y')}
+                x2={graph.project(controls().absolute, 'x')}
+                y2={graph.project(controls().absolute, 'y')}
+              />
+            </g>
+            <graph.Handle
+              position={controls().absolute}
+              onPointerDown={onPointerDown}
+              {...props}
             />
           </g>
-          <graph.Handle
-            position={controls()[0]}
-            onPointerDown={onPointerDown}
-            {...props}
-          />
-        </g>
-      )}
+        )
+      }}
     </Show>
   )
 }
@@ -264,7 +263,7 @@ export interface AnchorProps {
 export function Anchor(props: AnchorProps) {
   const graph = useGraph()
 
-  const position = () => graph.absoluteAnchors[props.index][0]
+  const position = () => graph.anchors[props.index][0]
 
   async function onPointerDown(event: MouseEvent) {
     const initialPosition = { ...position() }

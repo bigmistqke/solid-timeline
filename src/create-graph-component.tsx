@@ -11,10 +11,11 @@ import {
 } from 'solid-js'
 import { Api } from './create-timeline'
 import { graphComponentNames, GraphComponents } from './graph-components'
-import { DConfig } from './lib/d-from-anchors'
+import { DConfig } from './lib/d-from-processed-anchors'
 import { useSheet } from './sheet'
 import { Merge, Vector } from './types'
 import { processProps } from './utils/default-props'
+import { getLastArrayItem } from './utils/get-last-array-item'
 import { whenMemo } from './utils/once-every-when'
 
 /**********************************************************************************/
@@ -108,8 +109,8 @@ export function createGraphComponent(api: Api) {
     }))
 
     function isOutOfBounds(x: number) {
-      const [firstPosition] = api.absoluteAnchors[0]
-      const [lastPosition] = api.absoluteAnchors[api.absoluteAnchors.length - 1]
+      const [firstPosition] = api.anchors[0]
+      const [lastPosition] = getLastArrayItem(api.anchors)
 
       return x < firstPosition.x || x > lastPosition.x
     }
@@ -157,7 +158,7 @@ export function createGraphComponent(api: Api) {
       index: number
       absoluteControl: Vector
     }) {
-      const [position] = api.absoluteAnchors[index]
+      const [position] = api.anchors[index]
       return {
         // Absolute value to absolute offset from position
         y: Math.floor(absoluteControl.y - position.y),
@@ -179,16 +180,16 @@ export function createGraphComponent(api: Api) {
     function updatePadding() {
       let min = 0
       let max = 0
-      api.absoluteAnchors.forEach(([position, { pre, post } = {}]) => {
+      api.processedAnchors.forEach(([position, { pre, post } = {}]) => {
         min = Math.max(min, minPaddingFromVector(position))
         max = Math.max(max, maxPaddingFromVector(position))
         if (pre) {
-          min = Math.max(min, minPaddingFromVector(pre))
-          max = Math.max(max, maxPaddingFromVector(pre))
+          min = Math.max(min, minPaddingFromVector(pre.absolute))
+          max = Math.max(max, maxPaddingFromVector(pre.absolute))
         }
         if (post) {
-          min = Math.max(min, minPaddingFromVector(post))
-          max = Math.max(max, maxPaddingFromVector(post))
+          min = Math.max(min, minPaddingFromVector(post.absolute))
+          max = Math.max(max, maxPaddingFromVector(post.absolute))
         }
       })
 
