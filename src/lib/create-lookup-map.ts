@@ -1,11 +1,11 @@
-import { ProcessedAnchor, Vector } from 'solid-timeline/types'
+import { ClampedAnchor, Vector } from 'solid-timeline/types'
 
-const isPreAnchor = (anchor: ProcessedAnchor) => !!anchor?.pre
-const isPostAnchor = (point: ProcessedAnchor) => !!point?.post
+const isPreAnchor = (anchor: ClampedAnchor) => !!anchor?.pre
+const isPostAnchor = (point: ClampedAnchor) => !!point?.post
 
 export function createLookupMap(
-  start: ProcessedAnchor,
-  end: ProcessedAnchor,
+  start: ClampedAnchor,
+  end: ClampedAnchor,
   amount = 30
 ) {
   if (isPostAnchor(start) && isPreAnchor(end)) {
@@ -18,14 +18,14 @@ export function createLookupMap(
 }
 
 export const createCubicLookupMap = (
-  startAnchor: ProcessedAnchor,
-  endAnchor: ProcessedAnchor,
+  startAnchor: ClampedAnchor,
+  endAnchor: ClampedAnchor,
   amount = 60
 ): Array<Vector> => {
   const step = (type: 'x' | 'y', t: number) =>
     Math.pow(1 - t, 3) * startAnchor.position[type] +
-    3 * Math.pow(1 - t, 2) * t * startAnchor.post!.clamped[type] +
-    3 * (1 - t) * Math.pow(t, 2) * endAnchor.pre!.clamped[type] +
+    3 * Math.pow(1 - t, 2) * t * startAnchor.post!.absolute.clamped[type] +
+    3 * (1 - t) * Math.pow(t, 2) * endAnchor.pre!.absolute.clamped[type] +
     Math.pow(t, 3) * endAnchor.position[type]
 
   const res = []
@@ -40,8 +40,8 @@ export const createCubicLookupMap = (
 }
 
 const createQuadraticLookupMap = (
-  startAnchor: ProcessedAnchor,
-  endAnchor: ProcessedAnchor,
+  startAnchor: ClampedAnchor,
+  endAnchor: ClampedAnchor,
   amount = 60
 ): Array<Vector> => {
   const step = (type: 'x' | 'y', t: number) =>
@@ -50,8 +50,8 @@ const createQuadraticLookupMap = (
       (1 - t) *
       t *
       (startAnchor.post
-        ? startAnchor.post!.clamped[type]
-        : endAnchor.pre!.clamped[type]) + // Use post if available, otherwise pre
+        ? startAnchor.post!.absolute.clamped[type]
+        : endAnchor.pre!.absolute.clamped[type]) + // Use post if available, otherwise pre
     Math.pow(t, 2) * endAnchor.position[type]
 
   const res = []

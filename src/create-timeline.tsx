@@ -3,10 +3,16 @@ import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import { createGraphComponent } from './create-graph-component'
 import { createValueComponent } from './create-value-component'
 import { createLookupMap } from './lib/create-lookup-map'
-import { DConfig, dFromProcessedAnchors } from './lib/d-from-processed-anchors'
+import { DConfig, dFromClampedAnchors } from './lib/d-from-clamped-anchors'
 import { getValueFromSegments } from './lib/get-value-from-segments'
 import { addVector, multiplyVector } from './lib/vector'
-import type { Anchor, ProcessedAnchor, Segment, Vector } from './types'
+import type {
+  Anchor,
+  ClampedAnchor,
+  ClampedControl,
+  Segment,
+  Vector,
+} from './types'
 import { createArrayProxy } from './utils/create-array-proxy'
 
 /**********************************************************************************/
@@ -16,7 +22,7 @@ import { createArrayProxy } from './utils/create-array-proxy'
 /**********************************************************************************/
 
 export interface Api {
-  processedAnchors: Array<ProcessedAnchor>
+  clampedAnchors: Array<ClampedAnchor>
   segments: Accessor<Array<Accessor<Segment>>>
   anchors: Array<Anchor>
   d(config?: DConfig): string
@@ -37,36 +43,34 @@ export function createTimeline(initial?: Array<Anchor>) {
     mapArray(
       () => anchors,
       (anchor): Anchor => {
-        const pre = createMemo(() =>
-          anchor?.pre
-            ? addVector(anchor.position, multiplyVector(anchor.pre, { x: -1 }))
-            : undefined
-        )
-        const post = createMemo(() =>
-          anchor?.post ? addVector(anchor.position, anchor.post) : undefined
-        )
-
         return {
           get position() {
             return anchor.position
           },
           get pre() {
-            return pre()
+            return anchor?.pre
+              ? addVector(
+                  anchor.position,
+                  multiplyVector(anchor.pre, { x: -1 })
+                )
+              : undefined
           },
           get post() {
-            return post()
+            return anchor?.post
+              ? addVector(anchor.position, anchor.post)
+              : undefined
           },
         }
       }
     )
   )
 
-  const processedAnchors = createArrayProxy(
+  const clampedAnchors = createArrayProxy(
     mapArray(
       () => absoluteAnchors,
-      (anchor, index): ProcessedAnchor => {
-        const pre = createMemo(() => processControl('pre', index(), anchor))
-        const post = createMemo(() => processControl('post', index(), anchor))
+      (anchor, index): ClampedAnchor => {
+        const pre = createMemo(() => processControl('pre', index()))
+        const post = createMemo(() => processControl('post', index()))
         return {
           get position() {
             return anchor.position
@@ -83,10 +87,10 @@ export function createTimeline(initial?: Array<Anchor>) {
   )
 
   const mapArraySegments = mapArray(
-    () => processedAnchors,
+    () => clampedAnchors,
     (anchor, index) =>
       createMemo(() => {
-        const next = processedAnchors[index() + 1]
+        const next = clampedAnchors[index() + 1]
         const result = next
           ? {
               range: [anchor.position.x, next.position.x],
@@ -116,12 +120,13 @@ export function createTimeline(initial?: Array<Anchor>) {
 
   function processControl(
     type: 'pre' | 'post',
-    index: number,
-    anchor: Anchor
-  ): { unclamped: Vector; clamped: Vector } | undefined {
-    const control = anchor?.[type]
+    index: number
+  ): ClampedControl | undefined {
+    const absoluteAnchor = absoluteAnchors[index]
+    const absoluteControl = absoluteAnchor[type]
+    const relativeControl = anchors[index][type]
 
-    if (!control) {
+    if (!absoluteControl || !relativeControl) {
       return undefined
     }
 
@@ -133,31 +138,39 @@ export function createTimeline(initial?: Array<Anchor>) {
 
     const [min, max] =
       type === 'post'
-        ? [anchor.position, pairedPosition]
-        : [pairedPosition, anchor.position]
+        ? [absoluteAnchor.position, pairedPosition]
+        : [pairedPosition, absoluteAnchor.position]
 
     // Clamp x to ensure monotonicity of the curve (https://en.wikipedia.org/wiki/Monotonic_function)
-    const clampedX = Math.max(min.x, Math.min(max.x, control.x))
+    const clampedX = Math.max(min.x, Math.min(max.x, absoluteControl.x))
 
-    if (clampedX === control.x) {
-      return { unclamped: control, clamped: control }
+    if (clampedX === absoluteControl.x) {
+      return {
+        relative: relativeControl,
+        absolute: { unclamped: absoluteControl, clamped: absoluteControl },
+      }
     } else {
       const ratio =
-        (anchor.position.x - clampedX) / (anchor.position.x - control.x)
+        (absoluteAnchor.position.x - clampedX) /
+        (absoluteAnchor.position.x - absoluteControl.x)
       const clampedY =
-        (control.y - anchor.position.y) * ratio + anchor.position.y
+        (absoluteControl.y - absoluteAnchor.position.y) * ratio +
+        absoluteAnchor.position.y
       return {
-        unclamped: control,
-        clamped: {
-          x: clampedX,
-          y: clampedY,
+        relative: relativeControl,
+        absolute: {
+          unclamped: absoluteControl,
+          clamped: {
+            x: clampedX,
+            y: clampedY,
+          },
         },
       }
     }
   }
 
   function d(config?: DConfig) {
-    return dFromProcessedAnchors(processedAnchors, config)
+    return dFromClampedAnchors(clampedAnchors, config)
   }
 
   function query(time: number) {
@@ -255,7 +268,7 @@ export function createTimeline(initial?: Array<Anchor>) {
   const api: Api = {
     addAnchor,
     anchors,
-    processedAnchors,
+    clampedAnchors,
     d,
     deleteAnchor,
     getPairedAnchorPosition,

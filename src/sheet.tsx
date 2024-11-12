@@ -21,7 +21,7 @@ import {
   Root,
 } from './graph-components'
 import { createWritable } from './utils/create-writable'
-import { processProps } from './utils/default-props'
+import { processProps } from './utils/props'
 
 interface SheetContext extends GraphComponents {
   pan: Accessor<number>

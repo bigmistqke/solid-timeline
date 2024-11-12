@@ -1,12 +1,12 @@
-import { ProcessedAnchor, Vector } from 'solid-timeline/types'
+import { ClampedAnchor, Vector } from 'solid-timeline/types'
 
 export interface DConfig {
   zoom?: Partial<Vector>
   offset?: Partial<Vector>
 }
 
-export function dFromProcessedAnchors(
-  absoluteAnchors: Array<ProcessedAnchor>,
+export function dFromClampedAnchors(
+  absoluteAnchors: Array<ClampedAnchor>,
   config?: DConfig
 ) {
   let d = ''
@@ -32,9 +32,9 @@ export function dFromProcessedAnchors(
 
     let segment = ''
     if (pre) {
-      segment += pre.clamped.x * zoom.x + offset.x
+      segment += pre.absolute.clamped.x * zoom.x + offset.x
       segment += ' '
-      segment += pre.clamped.y * zoom.y + offset.y
+      segment += pre.absolute.clamped.y * zoom.y + offset.y
       segment += ' '
     }
     if (d === '') {
@@ -57,9 +57,9 @@ export function dFromProcessedAnchors(
       }
 
       if (post) {
-        segment += post.clamped.x * zoom.x + offset.x
+        segment += post.absolute.clamped.x * zoom.x + offset.x
         segment += ' '
-        segment += post.clamped.y * zoom.y + offset.y
+        segment += post.absolute.clamped.y * zoom.y + offset.y
         segment += ' '
       }
     }

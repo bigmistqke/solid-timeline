@@ -1,5 +1,5 @@
 import { createSignal } from 'solid-js'
-import { defaultProps } from './utils/default-props'
+import { defaultProps } from './utils/props'
 
 export function createClock(options?: {
   time?: number

@@ -5,18 +5,19 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  mapArray,
   mergeProps,
-  splitProps,
   useContext,
 } from 'solid-js'
 import { Api } from './create-timeline'
 import { graphComponentNames, GraphComponents } from './graph-components'
-import { DConfig } from './lib/d-from-processed-anchors'
+import { DConfig } from './lib/d-from-clamped-anchors'
 import { useSheet } from './sheet'
-import { Merge, Vector } from './types'
-import { processProps } from './utils/default-props'
+import { Merge, ProjectedAnchor, Vector } from './types'
+import { createArrayProxy } from './utils/create-array-proxy'
 import { getLastArrayItem } from './utils/get-last-array-item'
 import { whenMemo } from './utils/once-every-when'
+import { pickProps, processProps, removeProps } from './utils/props'
 
 /**********************************************************************************/
 /*                                                                                */
@@ -24,7 +25,8 @@ import { whenMemo } from './utils/once-every-when'
 /*                                                                                */
 /**********************************************************************************/
 
-interface GraphContext extends Merge<Api, GraphComponents> {
+interface GraphContext
+  extends Merge<Omit<Api, 'clampedAnchors'>, GraphComponents> {
   project(point: Vector): Vector
   project(point: Vector | number, type: 'x' | 'y'): number
   unproject(point: Vector): Vector
@@ -37,6 +39,7 @@ interface GraphContext extends Merge<Api, GraphComponents> {
   setDimensions(dimensions: { width: number; height: number }): void
   isOutOfBounds(x: number): boolean
   offsetStyle(axis?: 'x' | 'y'): { transform: string }
+  projectedAnchors: Array<ProjectedAnchor>
 }
 
 const graphContext = createContext<GraphContext>()
@@ -79,7 +82,6 @@ export function createGraphComponent(api: Api) {
       },
       ['max', 'min', 'onPan', 'onTimeChange', 'onZoomChange', 'paddingY']
     )
-    const [sheetGraphComponents] = splitProps(sheet, graphComponentNames)
 
     const [dimensions, setDimensions] = createSignal<{
       width: number
@@ -103,6 +105,48 @@ export function createGraphComponent(api: Api) {
       x: sheet.pan() * zoom().x,
       y: (overflow().top - config.min) * zoom().y + config.paddingY,
     }))
+
+    const projectedAnchors = createArrayProxy(
+      mapArray(
+        () => api.clampedAnchors,
+        (anchor): ProjectedAnchor => {
+          function control(type: 'pre' | 'post') {
+            if (!anchor[type]) {
+              return undefined
+            }
+            return mergeProps(anchor[type], {
+              projected: {
+                get clamped() {
+                  return project(anchor[type]!.absolute.clamped)
+                },
+                get unclamped() {
+                  return project(anchor[type]!.absolute.unclamped)
+                },
+              },
+            })
+          }
+          const pre = createMemo(() => control('pre'))
+          const post = createMemo(() => control('post'))
+
+          return {
+            position: {
+              get projected() {
+                return project(anchor.position)
+              },
+              get absolute() {
+                return anchor.position
+              },
+            },
+            get pre() {
+              return pre()
+            },
+            get post() {
+              return post()
+            },
+          }
+        }
+      )
+    )
 
     function project(point: Vector | number): Vector
     function project(point: Vector | number, axis: 'x' | 'y'): number
@@ -155,16 +199,22 @@ export function createGraphComponent(api: Api) {
       let top = 0
       let bottom = 0
 
-      api.processedAnchors.forEach(({ position, pre, post }) => {
+      api.clampedAnchors.forEach(({ position, pre, post }) => {
         top = Math.max(top, topOverflowFromVector(position))
         bottom = Math.max(bottom, bottomOverflowFromVector(position))
         if (pre) {
-          top = Math.max(top, topOverflowFromVector(pre.unclamped))
-          bottom = Math.max(bottom, bottomOverflowFromVector(pre.unclamped))
+          top = Math.max(top, topOverflowFromVector(pre.absolute.unclamped))
+          bottom = Math.max(
+            bottom,
+            bottomOverflowFromVector(pre.absolute.unclamped)
+          )
         }
         if (post) {
-          top = Math.max(top, topOverflowFromVector(post.unclamped))
-          bottom = Math.max(bottom, bottomOverflowFromVector(post.unclamped))
+          top = Math.max(top, topOverflowFromVector(post.absolute.unclamped))
+          bottom = Math.max(
+            bottom,
+            bottomOverflowFromVector(post.absolute.unclamped)
+          )
         }
       })
 
@@ -190,18 +240,23 @@ export function createGraphComponent(api: Api) {
     createEffect(() => config.onZoomChange?.(zoom()))
     createEffect(() => config.onPan?.(sheet.pan()))
 
-    const graph: GraphContext = mergeProps(sheetGraphComponents, api, {
-      d,
-      project,
-      unproject,
-      dimensions,
-      zoom,
-      offset,
-      updateOverflow,
-      isOutOfBounds,
-      setDimensions,
-      offsetStyle,
-    })
+    const graph: GraphContext = mergeProps(
+      pickProps(sheet, graphComponentNames),
+      removeProps(api, ['clampedAnchors']),
+      {
+        d,
+        project,
+        unproject,
+        dimensions,
+        zoom,
+        offset,
+        updateOverflow,
+        isOutOfBounds,
+        setDimensions,
+        offsetStyle,
+        projectedAnchors,
+      }
+    )
 
     return (
       <graphContext.Provider value={graph}>

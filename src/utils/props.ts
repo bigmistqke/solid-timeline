@@ -19,3 +19,17 @@ export function defaultProps<T, K extends KeyOfOptionals<T>>(
 ): MergeProps<[Required<Pick<T, K>>, T]> {
   return mergeProps(defaults, props)
 }
+
+export function removeProps<
+  const T extends Record<string, any>,
+  const TKeys extends Array<keyof T>
+>(props: T, keys: TKeys) {
+  return splitProps(props, keys)[1]
+}
+
+export function pickProps<
+  const T extends Record<string, any>,
+  const TKeys extends Array<keyof T>
+>(props: T, keys: TKeys) {
+  return splitProps(props, keys)[0]
+}

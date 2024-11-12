@@ -1,16 +1,41 @@
-export type Vector = {
+export interface Vector {
   x: number
   y: number
 }
 
-export type Anchor = { position: Vector; pre?: Vector; post?: Vector }
-export type ProcessedAnchor = {
+export interface Anchor {
   position: Vector
-  pre?: { unclamped: Vector; clamped: Vector }
-  post?: { unclamped: Vector; clamped: Vector }
+  pre?: Vector
+  post?: Vector
 }
 
-export type Segment = {
+export interface ClampedAnchor {
+  position: Vector
+  pre?: ClampedControl
+  post?: ClampedControl
+}
+
+export interface ProjectedAnchor {
+  position: ProjectedPosition
+  pre?: ProjectedControl
+  post?: ProjectedControl
+}
+
+export interface ClampedControl {
+  relative: Vector
+  absolute: { unclamped: Vector; clamped: Vector }
+}
+
+export interface ProjectedControl extends ClampedControl {
+  projected: { unclamped: Vector; clamped: Vector }
+}
+
+export interface ProjectedPosition {
+  absolute: Vector
+  projected: Vector
+}
+
+export interface Segment {
   range: number[]
   map: Vector[]
 }

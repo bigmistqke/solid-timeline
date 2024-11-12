@@ -115,7 +115,6 @@ export interface HandleProps {
 }
 
 export function Handle(props: HandleProps) {
-  const graph = useGraph()
   const sheet = useSheet()
 
   const [active, setActive] = createSignal(false)
@@ -146,8 +145,8 @@ export function Handle(props: HandleProps) {
     >
       <circle
         data-timeline-handle-trigger={props.type}
-        cx={graph.project(props.position, 'x')}
-        cy={graph.project(props.position, 'y')}
+        cx={props.position.x}
+        cy={props.position.y}
         class={styles.handleTrigger}
         fill="transparent"
         onDblClick={onDblClick}
@@ -157,8 +156,8 @@ export function Handle(props: HandleProps) {
       <circle
         data-timeline-handle-visual={props.type}
         class={styles.handleVisual}
-        cx={graph.project(props.position, 'x')}
-        cy={graph.project(props.position, 'y')}
+        cx={props.position.x}
+        cy={props.position.y}
         r="3"
       />
     </g>
@@ -180,14 +179,11 @@ export function Control(props: ControlProps) {
   const graph = useGraph()
   const sheet = useSheet()
 
-  const position = () => graph.anchors[props.index].position
-  const controls = () => graph.processedAnchors[props.index][props.type]
-
   return (
-    <Show when={controls()}>
+    <Show when={graph.projectedAnchors[props.index][props.type]}>
       {(controls) => {
         async function onPointerDown(event: MouseEvent) {
-          const initialControl = { ...controls().unclamped }
+          const initialControl = { ...controls().absolute.unclamped }
           const pairedType = props.type === 'pre' ? 'post' : 'pre'
 
           await pointerHelper(event, ({ delta }) => {
@@ -195,7 +191,7 @@ export function Control(props: ControlProps) {
 
             const absoluteControl = subtractVector(initialControl, delta)
             const control = absoluteToRelativeControl({
-              position: position(),
+              position: graph.projectedAnchors[props.index].position.absolute,
               type: props.type,
               absoluteControl,
             })
@@ -225,22 +221,22 @@ export function Control(props: ControlProps) {
             >
               <line
                 data-timeline-control-line-clamped={props.type}
-                x1={graph.project(position().x, 'x')}
-                y1={graph.project(position().y, 'y')}
-                x2={graph.project(controls().clamped, 'x')}
-                y2={graph.project(controls().clamped, 'y')}
+                x1={graph.projectedAnchors[props.index].position.projected.x}
+                y1={graph.projectedAnchors[props.index].position.projected.y}
+                x2={controls().projected.clamped.x}
+                y2={controls().projected.clamped.y}
               />
               <line
                 data-timeline-control-line-unclamped={props.type}
                 stroke-dasharray="2px 2px"
-                x1={graph.project(controls().clamped, 'x')}
-                y1={graph.project(controls().clamped, 'y')}
-                x2={graph.project(controls().unclamped, 'x')}
-                y2={graph.project(controls().unclamped, 'y')}
+                x1={controls().projected.clamped.x}
+                y1={controls().projected.clamped.y}
+                x2={controls().projected.unclamped.x}
+                y2={controls().projected.unclamped.y}
               />
             </g>
             <graph.Handle
-              position={controls().unclamped}
+              position={controls().projected.unclamped}
               onPointerDown={onPointerDown}
               {...props}
             />
@@ -264,11 +260,10 @@ export interface AnchorProps {
 export function Anchor(props: AnchorProps) {
   const graph = useGraph()
 
-  const projectedPosition = () => graph.projectedAnchors[props.index].position
-  const position = () => graph.anchors[props.index].position
-
   async function onPointerDown(event: MouseEvent) {
-    const initialPosition = { ...position() }
+    const initialPosition = {
+      ...graph.projectedAnchors[props.index].position.absolute,
+    }
 
     const pre = graph.getPairedAnchorPosition('pre', props.index)
     const post = graph.getPairedAnchorPosition('post', props.index)
@@ -300,7 +295,7 @@ export function Anchor(props: AnchorProps) {
       <graph.Control type="post" index={props.index} />
       <graph.Handle
         type="position"
-        position={projectedPosition()}
+        position={graph.projectedAnchors[props.index].position.projected}
         onDblClick={() => graph.deleteAnchor(props.index)}
         onPointerDown={onPointerDown}
       />
