@@ -19,57 +19,55 @@ function App() {
     get min() {
       const topAnchor = TopTimeline.anchors[0]
       const leftAnchor = LeftTimeline.anchors[0]
-      return topAnchor[0].x < leftAnchor[0].x ? topAnchor[0].x : leftAnchor[0].x
+      return topAnchor.position.x < leftAnchor.position.x
+        ? topAnchor.position.x
+        : leftAnchor.position.x
     },
     get max() {
       const topAnchor = getLastArrayItem(TopTimeline.anchors)
       const leftAnchor = getLastArrayItem(LeftTimeline.anchors)
-      return topAnchor[0].x > leftAnchor[0].x ? topAnchor[0].x : leftAnchor[0].x
+      return topAnchor.position.x > leftAnchor.position.x
+        ? topAnchor.position.x
+        : leftAnchor.position.x
     },
     speed: 0.1,
     autostart: true,
   })
 
   const TopTimeline = createTimeline([
-    [{ x: 0, y: 0 }],
-    [
-      { x: 400, y: 300 },
-      {
-        pre: { x: 100, y: 0 },
-        post: { x: 100, y: 0 },
-      },
-    ],
-    [
-      { x: 800, y: 0 },
-      {
-        pre: { x: 100, y: 0 },
-      },
-    ],
+    { position: { x: 0, y: 0 } },
+    {
+      position: { x: 400, y: 300 },
+      pre: { x: 100, y: 0 },
+      post: { x: 100, y: 0 },
+    },
+    {
+      position: { x: 800, y: 0 },
+      pre: { x: 100, y: 0 },
+    },
   ])
 
   const LeftTimeline = createTimeline([
-    [{ x: 0, y: 0 }],
-    [{ x: 300, y: 750 }],
-    [
-      { x: 600, y: 0 },
-      {
-        pre: { x: 100, y: 0 },
-      },
-    ],
-    [
-      { x: 900, y: 500 },
-      {
-        pre: { x: 100, y: 0 },
-        post: { x: 100, y: 0 },
-      },
-    ],
-    [{ x: 1200, y: 100 }],
-    [
-      { x: 1500, y: 750 },
-      {
-        pre: { x: 100, y: 0 },
-      },
-    ],
+    {
+      position: { x: 0, y: 0 },
+    },
+    {
+      position: { x: 300, y: 750 },
+    },
+    {
+      position: { x: 600, y: 0 },
+      pre: { x: 100, y: 0 },
+    },
+    {
+      position: { x: 900, y: 500 },
+      pre: { x: 100, y: 0 },
+      post: { x: 100, y: 0 },
+    },
+    { position: { x: 1200, y: 100 } },
+    {
+      position: { x: 1500, y: 750 },
+      pre: { x: 100, y: 0 },
+    },
   ])
 
   return (

@@ -3,15 +3,12 @@ export type Vector = {
   y: number
 }
 
-export type Controls = { pre: Vector; post: Vector }
-export type ProcessedControls = {
-  pre: { unclamped: Vector; clamped: Vector }
-  post: { unclamped: Vector; clamped: Vector }
+export type Anchor = { position: Vector; pre?: Vector; post?: Vector }
+export type ProcessedAnchor = {
+  position: Vector
+  pre?: { unclamped: Vector; clamped: Vector }
+  post?: { unclamped: Vector; clamped: Vector }
 }
-
-export type InputAnchor = [Vector, Partial<Controls>?]
-export type AbsoluteAnchor = [Vector, Partial<Controls>]
-export type ProcessedAnchor = [Vector, Partial<ProcessedControls>]
 
 export type Segment = {
   range: number[]

@@ -1,7 +1,7 @@
 import { ProcessedAnchor, Vector } from 'solid-timeline/types'
 
-const isPreAnchor = (anchor: ProcessedAnchor) => !!anchor[1]?.pre
-const isPostAnchor = (point: ProcessedAnchor) => !!point[1]?.post
+const isPreAnchor = (anchor: ProcessedAnchor) => !!anchor?.pre
+const isPostAnchor = (point: ProcessedAnchor) => !!point?.post
 
 export function createLookupMap(
   start: ProcessedAnchor,
@@ -11,22 +11,22 @@ export function createLookupMap(
   if (isPostAnchor(start) && isPreAnchor(end)) {
     return createCubicLookupMap(start, end, amount)
   } else if (!isPostAnchor(start) && !isPreAnchor(end)) {
-    return [start[0], end[0]]
+    return [start.position, end.position]
   } else {
     return createQuadraticLookupMap(start, end, amount)
   }
 }
 
 export const createCubicLookupMap = (
-  [start, { post }]: ProcessedAnchor,
-  [end, { pre }]: ProcessedAnchor,
+  startAnchor: ProcessedAnchor,
+  endAnchor: ProcessedAnchor,
   amount = 60
 ): Array<Vector> => {
   const step = (type: 'x' | 'y', t: number) =>
-    Math.pow(1 - t, 3) * start[type] +
-    3 * Math.pow(1 - t, 2) * t * post!.clamped[type] +
-    3 * (1 - t) * Math.pow(t, 2) * pre!.clamped[type] +
-    Math.pow(t, 3) * end[type]
+    Math.pow(1 - t, 3) * startAnchor.position[type] +
+    3 * Math.pow(1 - t, 2) * t * startAnchor.post!.clamped[type] +
+    3 * (1 - t) * Math.pow(t, 2) * endAnchor.pre!.clamped[type] +
+    Math.pow(t, 3) * endAnchor.position[type]
 
   const res = []
 
@@ -40,14 +40,19 @@ export const createCubicLookupMap = (
 }
 
 const createQuadraticLookupMap = (
-  [start, { post }]: ProcessedAnchor,
-  [end, { pre }]: ProcessedAnchor,
+  startAnchor: ProcessedAnchor,
+  endAnchor: ProcessedAnchor,
   amount = 60
 ): Array<Vector> => {
   const step = (type: 'x' | 'y', t: number) =>
-    Math.pow(1 - t, 2) * start[type] +
-    2 * (1 - t) * t * (post ? post!.clamped[type] : pre!.clamped[type]) + // Use post if available, otherwise pre
-    Math.pow(t, 2) * end[type]
+    Math.pow(1 - t, 2) * startAnchor.position[type] +
+    2 *
+      (1 - t) *
+      t *
+      (startAnchor.post
+        ? startAnchor.post!.clamped[type]
+        : endAnchor.pre!.clamped[type]) + // Use post if available, otherwise pre
+    Math.pow(t, 2) * endAnchor.position[type]
 
   const res = []
 

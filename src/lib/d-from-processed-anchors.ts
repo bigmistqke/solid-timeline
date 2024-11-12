@@ -26,7 +26,7 @@ export function dFromProcessedAnchors(
   let currentCommand = ''
 
   absoluteAnchors.forEach((anchor, index) => {
-    const [point, { pre, post } = {}] = anchor
+    const { position, pre, post } = anchor
 
     let next = absoluteAnchors[index + 1]
 
@@ -42,14 +42,13 @@ export function dFromProcessedAnchors(
       segment += currentCommand
       segment += ' '
     }
-    segment += point.x * zoom.x + offset.x
+    segment += position.x * zoom.x + offset.x
     segment += ' '
-    segment += point.y * zoom.y + offset.y
+    segment += position.y * zoom.y + offset.y
     segment += ' '
 
     if (next) {
-      let command =
-        !next![1]?.pre && !post ? 'L' : next![1]?.pre && post ? 'C' : 'Q'
+      let command = !next.pre && !post ? 'L' : next.pre && post ? 'C' : 'Q'
 
       if (command !== currentCommand) {
         currentCommand = command

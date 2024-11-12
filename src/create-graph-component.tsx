@@ -139,9 +139,9 @@ export function createGraphComponent(api: Api) {
     }
 
     function isOutOfBounds(x: number) {
-      const [firstPosition] = api.anchors[0]
-      const [lastPosition] = getLastArrayItem(api.anchors)
-      return x < firstPosition.x || x > lastPosition.x
+      const firstAnchor = api.anchors[0]
+      const lastAnchor = getLastArrayItem(api.anchors)
+      return x < firstAnchor.position.x || x > lastAnchor.position.x
     }
 
     function bottomOverflowFromVector(value: Vector) {
@@ -155,7 +155,7 @@ export function createGraphComponent(api: Api) {
       let top = 0
       let bottom = 0
 
-      api.processedAnchors.forEach(([position, { pre, post } = {}]) => {
+      api.processedAnchors.forEach(({ position, pre, post }) => {
         top = Math.max(top, topOverflowFromVector(position))
         bottom = Math.max(bottom, bottomOverflowFromVector(position))
         if (pre) {

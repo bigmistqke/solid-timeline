@@ -6,14 +6,7 @@ import { createLookupMap } from './lib/create-lookup-map'
 import { DConfig, dFromProcessedAnchors } from './lib/d-from-processed-anchors'
 import { getValueFromSegments } from './lib/get-value-from-segments'
 import { addVector, multiplyVector } from './lib/vector'
-import type {
-  AbsoluteAnchor,
-  InputAnchor,
-  ProcessedAnchor,
-  ProcessedControls,
-  Segment,
-  Vector,
-} from './types'
+import type { Anchor, ProcessedAnchor, Segment, Vector } from './types'
 import { createArrayProxy } from './utils/create-array-proxy'
 
 /**********************************************************************************/
@@ -25,10 +18,10 @@ import { createArrayProxy } from './utils/create-array-proxy'
 export interface Api {
   processedAnchors: Array<ProcessedAnchor>
   segments: Accessor<Array<Accessor<Segment>>>
-  anchors: Array<InputAnchor>
+  anchors: Array<Anchor>
   d(config?: DConfig): string
   query(time: number): number
-  setAnchors: SetStoreFunction<Array<InputAnchor>>
+  setAnchors: SetStoreFunction<Array<Anchor>>
   deleteAnchor(index: number): void
   addAnchor(time: number, value?: number): void
   getPairedAnchorPosition(
@@ -37,33 +30,33 @@ export interface Api {
   ): Vector | undefined
 }
 
-export function createTimeline(initial?: Array<InputAnchor>) {
-  const [anchors, setAnchors] = createStore<Array<InputAnchor>>(initial || [])
+export function createTimeline(initial?: Array<Anchor>) {
+  const [anchors, setAnchors] = createStore<Array<Anchor>>(initial || [])
 
   const absoluteAnchors = createArrayProxy(
     mapArray(
       () => anchors,
-      (anchor): AbsoluteAnchor => {
+      (anchor): Anchor => {
         const pre = createMemo(() =>
-          anchor[1]?.pre
-            ? addVector(anchor[0], multiplyVector(anchor[1].pre, { x: -1 }))
+          anchor?.pre
+            ? addVector(anchor.position, multiplyVector(anchor.pre, { x: -1 }))
             : undefined
         )
         const post = createMemo(() =>
-          anchor[1]?.post ? addVector(anchor[0], anchor[1].post) : undefined
+          anchor?.post ? addVector(anchor.position, anchor.post) : undefined
         )
 
-        return [
-          anchor[0],
-          {
-            get pre() {
-              return pre()
-            },
-            get post() {
-              return post()
-            },
+        return {
+          get position() {
+            return anchor.position
           },
-        ]
+          get pre() {
+            return pre()
+          },
+          get post() {
+            return post()
+          },
+        }
       }
     )
   )
@@ -74,17 +67,17 @@ export function createTimeline(initial?: Array<InputAnchor>) {
       (anchor, index): ProcessedAnchor => {
         const pre = createMemo(() => processControl('pre', index(), anchor))
         const post = createMemo(() => processControl('post', index(), anchor))
-        return [
-          anchor[0],
-          {
-            get pre() {
-              return pre()
-            },
-            get post() {
-              return post()
-            },
+        return {
+          get position() {
+            return anchor.position
           },
-        ]
+          get pre() {
+            return pre()
+          },
+          get post() {
+            return post()
+          },
+        }
       }
     )
   )
@@ -94,12 +87,13 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     (anchor, index) =>
       createMemo(() => {
         const next = processedAnchors[index() + 1]
-        return next
+        const result = next
           ? {
-              range: [anchor[0].x, next[0].x],
+              range: [anchor.position.x, next.position.x],
               map: createLookupMap(anchor, next),
             }
           : undefined
+        return result
       })
   )
 
@@ -117,15 +111,15 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     if (type === 'post' && index === anchors.length - 1) {
       return undefined
     }
-    return anchors[type === 'pre' ? index - 1 : index + 1][0]
+    return anchors[type === 'pre' ? index - 1 : index + 1].position
   }
 
   function processControl(
     type: 'pre' | 'post',
     index: number,
-    [position, controls]: AbsoluteAnchor
-  ): ProcessedControls[keyof ProcessedControls] | undefined {
-    const control = controls?.[type]
+    anchor: Anchor
+  ): { unclamped: Vector; clamped: Vector } | undefined {
+    const control = anchor?.[type]
 
     if (!control) {
       return undefined
@@ -138,7 +132,9 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     }
 
     const [min, max] =
-      type === 'post' ? [position, pairedPosition] : [pairedPosition, position]
+      type === 'post'
+        ? [anchor.position, pairedPosition]
+        : [pairedPosition, anchor.position]
 
     // Clamp x to ensure monotonicity of the curve (https://en.wikipedia.org/wiki/Monotonic_function)
     const clampedX = Math.max(min.x, Math.min(max.x, control.x))
@@ -146,8 +142,10 @@ export function createTimeline(initial?: Array<InputAnchor>) {
     if (clampedX === control.x) {
       return { unclamped: control, clamped: control }
     } else {
-      const ratio = (position.x - clampedX) / (position.x - control.x)
-      const clampedY = (control.y - position.y) * ratio + position.y
+      const ratio =
+        (anchor.position.x - clampedX) / (anchor.position.x - control.x)
+      const clampedY =
+        (control.y - anchor.position.y) * ratio + anchor.position.y
       return {
         unclamped: control,
         clamped: {
@@ -169,85 +167,82 @@ export function createTimeline(initial?: Array<InputAnchor>) {
   function addAnchor(time: number, value = query(time)) {
     setAnchors(
       produce((anchors) => {
-        let index = anchors.findIndex(([anchor]) => {
-          return anchor.x > time
+        let index = anchors.findIndex(({ position }) => {
+          return position.x > time
         })
 
         // Last element
         if (index === -1) {
-          const [lastPosition, lastControl] = anchors[anchors.length - 1]
-          const maxX = Math.min((time - lastPosition.x) / 2, 100)
+          const lastAnchor = anchors[anchors.length - 1]
+          const maxX = Math.min((time - lastAnchor.position.x) / 2, 100)
 
-          if (lastControl?.pre) {
-            const scale =
-              lastControl.pre.x > maxX ? maxX / lastControl.pre.x : 1
+          if (lastAnchor?.pre) {
+            const scale = lastAnchor.pre.x > maxX ? maxX / lastAnchor.pre.x : 1
 
-            anchors[anchors.length - 1][1] = {
-              ...lastControl,
-              post: {
-                x: lastControl.pre.x * scale,
-                y: lastControl.pre.y * scale * -1,
-              },
+            lastAnchor.post = {
+              x: lastAnchor.pre.x * scale,
+              y: lastAnchor.pre.y * scale * -1,
             }
           } else {
-            anchors[anchors.length - 1][1] = {
-              post: { x: maxX, y: 0 },
-            }
+            lastAnchor.post = { x: maxX, y: 0 }
           }
 
-          anchors.push([{ x: time, y: value }, { pre: { x: maxX, y: 0 } }])
+          anchors.push({
+            position: { x: time, y: value },
+            pre: { x: maxX, y: 0 },
+          })
         }
         // First element
         else if (index === 0) {
-          const [firstPosition, firstControl] = anchors[0]
-          const maxX = Math.min((firstPosition.x - time) / 2, 100)
+          const firstAnchor = anchors[0]
+          const maxX = Math.min((firstAnchor.position.x - time) / 2, 100)
 
-          if (firstControl?.post) {
+          if (firstAnchor?.post) {
             const scale =
-              firstControl.post.x > maxX ? maxX / firstControl.post.x : 1
+              firstAnchor.post.x > maxX ? maxX / firstAnchor.post.x : 1
 
-            firstControl.pre = {
-              x: firstControl.post.x * scale,
-              y: firstControl.post.y * scale * -1,
+            firstAnchor.pre = {
+              x: firstAnchor.post.x * scale,
+              y: firstAnchor.post.y * scale * -1,
             }
           } else {
-            if (firstControl) {
-              firstControl.pre = { x: maxX, y: 0 }
-            } else {
-              anchors[0][1] = { pre: { x: maxX, y: 0 } }
-            }
+            firstAnchor.pre = { x: maxX, y: 0 }
           }
-          anchors.unshift([{ x: time, y: value }, { post: { x: maxX, y: 0 } }])
+          anchors.unshift({
+            position: { x: time, y: value },
+            post: { x: maxX, y: 0 },
+          })
         } else {
-          const [prePosition, preControl] = anchors[index - 1]
-          const [postPosition, postControl] = anchors[index]
+          const preAnchor = anchors[index - 1]
+          const postAnchor = anchors[index]
 
           const maxX = Math.min(
-            (time - prePosition.x) / 2,
-            (postPosition.x - time) / 2,
+            (time - preAnchor.position.x) / 2,
+            (postAnchor.position.x - time) / 2,
             100
           )
 
-          if (preControl?.post?.x && maxX < preControl.post.x) {
-            const scale = maxX / preControl.post.x
-            preControl.post = {
+          if (preAnchor?.post?.x && maxX < preAnchor.post.x) {
+            const scale = maxX / preAnchor.post.x
+            preAnchor.post = {
               x: maxX,
-              y: preControl.post.y * scale,
+              y: preAnchor.post.y * scale,
             }
           }
 
-          if (postControl?.pre?.x && maxX < postControl.pre.x) {
-            const scale = maxX / postControl.pre.x
-            postControl.pre = {
+          if (postAnchor?.pre?.x && maxX < postAnchor.pre.x) {
+            const scale = maxX / postAnchor.pre.x
+            postAnchor.pre = {
               x: maxX,
-              y: postControl.pre.y * scale,
+              y: postAnchor.pre.y * scale,
             }
           }
 
-          anchors.splice(index, 0, [
-            { x: time, y: value },
-            { pre: { x: maxX, y: 0 }, post: { x: maxX, y: 0 } },
-          ])
+          anchors.splice(index, 0, {
+            position: { x: time, y: value },
+            pre: { x: maxX, y: 0 },
+            post: { x: maxX, y: 0 },
+          })
         }
       })
     )

@@ -180,8 +180,8 @@ export function Control(props: ControlProps) {
   const graph = useGraph()
   const sheet = useSheet()
 
-  const position = () => graph.anchors[props.index][0]
-  const controls = () => graph.processedAnchors[props.index][1][props.type]
+  const position = () => graph.anchors[props.index].position
+  const controls = () => graph.processedAnchors[props.index][props.type]
 
   return (
     <Show when={controls()}>
@@ -199,7 +199,7 @@ export function Control(props: ControlProps) {
               type: props.type,
               absoluteControl,
             })
-            graph.setAnchors(props.index, 1, props.type, control)
+            graph.setAnchors(props.index, props.type, control)
 
             // Symmetric dragging of paired control
             if (
@@ -207,7 +207,7 @@ export function Control(props: ControlProps) {
               props.index !== graph.anchors.length - 1 &&
               props.index !== 0
             ) {
-              graph.setAnchors(props.index, 1, pairedType, {
+              graph.setAnchors(props.index, pairedType, {
                 x: control.x,
                 y: control.y * -1,
               })
@@ -264,7 +264,8 @@ export interface AnchorProps {
 export function Anchor(props: AnchorProps) {
   const graph = useGraph()
 
-  const position = () => graph.anchors[props.index][0]
+  const projectedPosition = () => graph.projectedAnchors[props.index].position
+  const position = () => graph.anchors[props.index].position
 
   async function onPointerDown(event: MouseEvent) {
     const initialPosition = { ...position() }
@@ -287,7 +288,7 @@ export function Anchor(props: AnchorProps) {
         position.x = post.x - 1
       }
 
-      graph.setAnchors(props.index, 0, position)
+      graph.setAnchors(props.index, 'position', position)
     })
 
     graph.updateOverflow()
@@ -299,7 +300,7 @@ export function Anchor(props: AnchorProps) {
       <graph.Control type="post" index={props.index} />
       <graph.Handle
         type="position"
-        position={position()}
+        position={projectedPosition()}
         onDblClick={() => graph.deleteAnchor(props.index)}
         onPointerDown={onPointerDown}
       />
