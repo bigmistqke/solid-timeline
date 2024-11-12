@@ -1,6 +1,6 @@
-import { createSignal, onCleanup } from 'solid-js'
 import { createTimeline, Sheet } from 'solid-timeline'
 import { createClock } from 'solid-timeline/create-clock'
+import { getLastArrayItem } from 'solid-timeline/utils/get-last-array-item'
 import styles from './App.module.css'
 
 const average = (a, b) => (a + b) / 2
@@ -50,10 +50,12 @@ function Circle(props: { top: number; left: number }) {
 }
 
 function App() {
-  const [domRect, setDomRect] = createSignal<DOMRect>()
   const [time, clock] = createClock({
+    get min() {
+      return min()
+    },
     get max() {
-      return domRect()?.width
+      return max()
     },
     speed: 0.1,
   })
@@ -100,18 +102,18 @@ function App() {
     ],
   ])
 
-  function onRef(element: HTMLDivElement) {
-    function updateDomRect() {
-      setDomRect(element.getBoundingClientRect())
-    }
-    const observer = new ResizeObserver(updateDomRect)
-    observer.observe(element)
-    updateDomRect()
-
-    clock.start()
-
-    onCleanup(() => observer.disconnect())
+  const max = () => {
+    const topAnchor = getLastArrayItem(TopTimeline.anchors)
+    const leftAnchor = getLastArrayItem(LeftTimeline.anchors)
+    return topAnchor[0].x > leftAnchor[0].x ? topAnchor[0].x : leftAnchor[0].x
   }
+  const min = () => {
+    const topAnchor = TopTimeline.anchors[0]
+    const leftAnchor = LeftTimeline.anchors[0]
+    return topAnchor[0].x < leftAnchor[0].x ? topAnchor[0].x : leftAnchor[0].x
+  }
+
+  clock.start()
 
   return (
     <div class={styles.app}>
@@ -119,7 +121,7 @@ function App() {
         top={TopTimeline.getValue(time())}
         left={LeftTimeline.getValue(time())}
       />
-      <Sheet time={time()} class={styles.sheet} ref={onRef}>
+      <Sheet time={time()} class={styles.sheet}>
         <div class={styles.timelineContainer}>
           <TopTimeline.Value class={styles.value}>
             <TopTimeline.Value.Input decimals={2} style={{ width: '75px' }} />

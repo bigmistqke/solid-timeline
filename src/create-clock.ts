@@ -16,17 +16,28 @@ export function createClock(options?: {
   const [time, setTime] = createSignal(performance.now())
 
   let shouldLoop = true
-  function loop() {
+  let previous: number = 0
+  function loop(now: number) {
+    let delta = now - previous
+    previous = now
     if (!shouldLoop) return
     requestAnimationFrame(loop)
-    if (config.max) {
-      setTime(
-        ((performance.now() * config.speed) % (config.max - config.min)) +
-          config.min
-      )
-    } else {
-      setTime(performance.now() * config.speed + config.min)
-    }
+    if (!delta) return
+
+    setTime((time) => {
+      let newTime = time + delta * config.speed
+
+      if (config.max) {
+        let range = config.max - config.min
+        // Adjust for negative values by ensuring newTime is within the range
+        newTime =
+          ((((newTime - config.min) % range) + range) % range) + config.min
+      } else {
+        newTime += config.min
+      }
+
+      return newTime
+    })
   }
 
   return [
@@ -34,8 +45,9 @@ export function createClock(options?: {
     {
       set: setTime,
       start: () => {
+        previous = performance.now()
         shouldLoop = true
-        loop()
+        loop(performance.now())
       },
       stop: () => {
         shouldLoop = false
