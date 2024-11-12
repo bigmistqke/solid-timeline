@@ -48,10 +48,10 @@ export interface GridProps {
 export function Grid(props: GridProps) {
   const graph = useGraph()
 
-  const offset = () => ({
-    x: Math.floor(graph.offset().x / props.grid.x) * props.grid.x * -1,
-    y: 0,
-  })
+  const offset = (axis: 'x' | 'y') => {
+    const projectedGrid = graph.project(props.grid[axis], axis)
+    return Math.floor(graph.offset()[axis] / projectedGrid) * projectedGrid
+  }
 
   return (
     <Show when={graph.dimensions()}>
@@ -69,8 +69,8 @@ export function Grid(props: GridProps) {
                 <line
                   x1={0}
                   x2={dimensions().width}
-                  y1={graph.project(y * props.grid.y, 'y') + offset().y}
-                  y2={graph.project(y * props.grid.y, 'y') + offset().y}
+                  y1={graph.project(y * props.grid.y, 'y') - offset('y')}
+                  y2={graph.project(y * props.grid.y, 'y') - offset('y')}
                 />
               )}
             </Index>
@@ -86,8 +86,8 @@ export function Grid(props: GridProps) {
             >
               {(_, x) => (
                 <line
-                  x1={graph.project(x * props.grid.x, 'x') + offset().x}
-                  x2={graph.project(x * props.grid.x, 'x') + offset().x}
+                  x1={graph.project(x * props.grid.x, 'x') - offset('x')}
+                  x2={graph.project(x * props.grid.x, 'x') - offset('x')}
                   y1={0}
                   y2={dimensions().height}
                 />
