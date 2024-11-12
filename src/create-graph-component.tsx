@@ -33,12 +33,7 @@ interface GraphContext extends Merge<Api, GraphComponents> {
   zoom: Accessor<Vector>
   offset: Accessor<Vector>
   getValue(time: number): number
-  updatePadding(): void
-  absoluteToRelativeControl(config: {
-    type: 'pre' | 'post'
-    index: number
-    absoluteControl: Vector
-  }): Vector
+  updateOverflow(): void
   setDimensions(dimensions: { width: number; height: number }): void
   isOutOfBounds(x: number): boolean
   offsetStyle(axis?: 'x' | 'y'): { transform: string }
@@ -90,8 +85,8 @@ export function createGraphComponent(api: Api) {
       width: number
       height: number
     }>()
-    const [paddingMax, setPaddingMax] = createSignal(0)
-    const [paddingMin, setPaddingMin] = createSignal(0)
+
+    const [overflow, setOverflow] = createSignal({ top: 0, bottom: 0 })
 
     const zoom = whenMemo(
       dimensions,
@@ -99,22 +94,15 @@ export function createGraphComponent(api: Api) {
         x: sheet.zoomX(),
         y:
           (dimensions.height - config.paddingY * 2) /
-          (config.max - config.min + paddingMax() + paddingMin()),
+          (config.max - config.min + overflow().bottom + overflow().top),
       }),
       { x: 1, y: 1 }
     )
 
     const offset = createMemo(() => ({
       x: sheet.pan() * zoom().x,
-      y: (paddingMin() - config.min) * zoom().y + config.paddingY,
+      y: (overflow().top - config.min) * zoom().y + config.paddingY,
     }))
-
-    function isOutOfBounds(x: number) {
-      const [firstPosition] = api.anchors[0]
-      const [lastPosition] = getLastArrayItem(api.anchors)
-
-      return x < firstPosition.x || x > lastPosition.x
-    }
 
     function project(point: Vector | number): Vector
     function project(point: Vector | number, axis: 'x' | 'y'): number
@@ -150,52 +138,37 @@ export function createGraphComponent(api: Api) {
       return value / zoom()[axis]
     }
 
-    function absoluteToRelativeControl({
-      type,
-      index,
-      absoluteControl,
-    }: {
-      type: 'pre' | 'post'
-      index: number
-      absoluteControl: Vector
-    }) {
-      const [position] = api.anchors[index]
-      return {
-        // Absolute value to absolute offset from position
-        y: Math.floor(absoluteControl.y - position.y),
-        // Absolute value to relative range [0-1]
-        x:
-          type === 'pre'
-            ? Math.floor(position.x - absoluteControl.x)
-            : Math.floor(absoluteControl.x - position.x),
-      }
+    function isOutOfBounds(x: number) {
+      const [firstPosition] = api.anchors[0]
+      const [lastPosition] = getLastArrayItem(api.anchors)
+      return x < firstPosition.x || x > lastPosition.x
     }
 
-    function maxPaddingFromVector(value: Vector) {
+    function bottomOverflowFromVector(value: Vector) {
       return Math.max(value.y, config.max) - config.max
     }
-    function minPaddingFromVector(value: Vector) {
+    function topOverflowFromVector(value: Vector) {
       return config.min - Math.min(value.y, config.min)
     }
 
-    function updatePadding() {
-      let min = 0
-      let max = 0
+    function updateOverflow() {
+      let top = 0
+      let bottom = 0
+
       api.processedAnchors.forEach(([position, { pre, post } = {}]) => {
-        min = Math.max(min, minPaddingFromVector(position))
-        max = Math.max(max, maxPaddingFromVector(position))
+        top = Math.max(top, topOverflowFromVector(position))
+        bottom = Math.max(bottom, bottomOverflowFromVector(position))
         if (pre) {
-          min = Math.max(min, minPaddingFromVector(pre.absolute))
-          max = Math.max(max, maxPaddingFromVector(pre.absolute))
+          top = Math.max(top, topOverflowFromVector(pre.absolute))
+          bottom = Math.max(bottom, bottomOverflowFromVector(pre.absolute))
         }
         if (post) {
-          min = Math.max(min, minPaddingFromVector(post.absolute))
-          max = Math.max(max, maxPaddingFromVector(post.absolute))
+          top = Math.max(top, topOverflowFromVector(post.absolute))
+          bottom = Math.max(bottom, bottomOverflowFromVector(post.absolute))
         }
       })
 
-      setPaddingMin(min)
-      setPaddingMax(max)
+      setOverflow({ top, bottom })
     }
 
     function d(config?: DConfig) {
@@ -224,8 +197,7 @@ export function createGraphComponent(api: Api) {
       dimensions,
       zoom,
       offset,
-      updatePadding,
-      absoluteToRelativeControl,
+      updateOverflow,
       isOutOfBounds,
       setDimensions,
       offsetStyle,

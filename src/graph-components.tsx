@@ -8,6 +8,7 @@ import {
   splitProps,
 } from 'solid-js'
 import { useGraph } from './create-graph-component'
+import { absoluteToRelativeControl } from './lib/absolute-to-relative-control'
 import { divideVector, subtractVector } from './lib/vector'
 import { useSheet } from './sheet'
 import styles from './timeline.module.css'
@@ -193,8 +194,8 @@ export function Control(props: ControlProps) {
             delta = divideVector(delta, graph.zoom())
 
             const absoluteControl = subtractVector(initialControl, delta)
-            const control = graph.absoluteToRelativeControl({
-              index: props.index,
+            const control = absoluteToRelativeControl({
+              position: position(),
               type: props.type,
               absoluteControl,
             })
@@ -213,7 +214,7 @@ export function Control(props: ControlProps) {
             }
           })
 
-          graph.updatePadding()
+          graph.updateOverflow()
         }
 
         return (
@@ -289,7 +290,7 @@ export function Anchor(props: AnchorProps) {
       graph.setAnchors(props.index, 0, position)
     })
 
-    graph.updatePadding()
+    graph.updateOverflow()
   }
 
   return (
@@ -423,7 +424,7 @@ export function Root(props: RootProps) {
     const anchor = presence()
     if (anchor) {
       graph.addAnchor(anchor.x, anchor.y)
-      graph.updatePadding()
+      graph.updateOverflow()
     }
   }
 
@@ -442,14 +443,14 @@ export function Root(props: RootProps) {
         ref={(element) => {
           function updateDomRect() {
             graph.setDimensions(element.getBoundingClientRect())
-            graph.updatePadding()
+            graph.updateOverflow()
           }
           const observer = new ResizeObserver(updateDomRect)
           observer.observe(element)
           updateDomRect()
           onCleanup(() => observer.disconnect())
 
-          graph.updatePadding()
+          graph.updateOverflow()
         }}
         width="100%"
         height="100%"

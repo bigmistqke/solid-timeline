@@ -5,6 +5,7 @@ import { createTimeline, Sheet, useSheet } from 'solid-timeline'
 import { createClock } from 'solid-timeline/create-clock'
 import { useGraph } from 'solid-timeline/create-graph-component'
 import { GraphComponents } from 'solid-timeline/graph-components'
+import { absoluteToRelativeControl } from 'solid-timeline/lib/absolute-to-relative-control'
 import {
   addVector,
   divideVector,
@@ -138,8 +139,9 @@ const components: Partial<GraphComponents> = {
             await pointerHelper(event, ({ delta }) => {
               delta = divideVector(delta, graph.zoom())
 
-              const control = graph.absoluteToRelativeControl({
+              const control = absoluteToRelativeControl({
                 ...props,
+                position: position(),
                 absoluteControl: subtractVector(initialControl, delta),
               })
               graph.setAnchors(props.index, 1, props.type, control)
@@ -157,7 +159,7 @@ const components: Partial<GraphComponents> = {
               }
             })
 
-            graph.updatePadding()
+            graph.updateOverflow()
           }
 
           return (
