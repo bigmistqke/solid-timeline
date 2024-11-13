@@ -13,7 +13,7 @@ export function absoluteToRelativeControl({
     y: Math.floor(absoluteControl.y - position.y),
     x:
       type === 'pre'
-        ? Math.floor(position.x - absoluteControl.x)
-        : Math.floor(absoluteControl.x - position.x),
+        ? Math.max(0, Math.floor(position.x - absoluteControl.x))
+        : Math.max(0, Math.floor(absoluteControl.x - position.x)),
   }
 }
