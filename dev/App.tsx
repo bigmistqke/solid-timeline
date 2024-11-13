@@ -14,13 +14,13 @@ function Circle(props: { top: number; left: number }) {
   )
 }
 
-function createRandomAnchors(amount = 1000) {
+function createRandomAnchors(amount = 5000) {
   return Array.from({ length: amount }, (_, index) =>
     index !== 0 && index !== amount - 1
       ? {
           position: { x: index * 100, y: Math.random() * 500 },
-          pre: { x: 100, y: 0 },
-          post: { x: 100, y: 0 },
+          pre: { x: 50, y: 0 },
+          post: { x: 50, y: 0 },
         }
       : { position: { x: index * 100, y: Math.random() * 500 } }
   )
@@ -47,7 +47,6 @@ function App() {
   })
 
   const TopTimeline = createTimeline(createRandomAnchors())
-
   const LeftTimeline = createTimeline(createRandomAnchors())
 
   return (
