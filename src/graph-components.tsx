@@ -364,7 +364,7 @@ export function Path() {
           <path
             data-timeline-path
             fill="none"
-            d={graph.d({ range: [index * 100, (index + 1) * 100] })}
+            d={graph.d({ range: [index * 100, (index + 1) * 100 + 1] })}
             style={{ 'pointer-events': 'none' }}
           />
         </Show>
