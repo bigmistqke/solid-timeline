@@ -9,6 +9,18 @@ export interface Anchor {
   post?: Vector
 }
 
+export interface AbsoluteAnchor {
+  position: Vector
+  pre?: {
+    relative: Vector
+    absolute: Vector
+  }
+  post?: {
+    relative: Vector
+    absolute: Vector
+  }
+}
+
 export interface ClampedAnchor {
   position: Vector
   pre?: ClampedControl

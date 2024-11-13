@@ -266,8 +266,8 @@ export function Anchor(props: AnchorProps) {
       ...graph.projectedAnchors[props.index].position.absolute,
     }
 
-    const pre = graph.getPairedAnchorPosition('pre', props.index)
-    const post = graph.getPairedAnchorPosition('post', props.index)
+    const pre = graph.anchors[props.index - 1].position
+    const post = graph.anchors[props.index + 1].position
 
     await pointerHelper(event, ({ delta }) => {
       delta = divideVector(delta, graph.zoom())
