@@ -4,7 +4,9 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createSelector,
   createSignal,
+  indexArray,
   mapArray,
   mergeProps,
   useContext,
@@ -40,6 +42,7 @@ interface GraphContext
   isOutOfBounds(x: number): boolean
   offsetStyle(axis?: 'x' | 'y'): { transform: string }
   projectedAnchors: Array<ProjectedAnchor>
+  isAnchorVisible(index: number): boolean
 }
 
 const graphContext = createContext<GraphContext>()
@@ -148,6 +151,63 @@ export function createGraphComponent(api: Api) {
       )
     )
 
+    const rangeSize = 100
+    const ranges = createMemo(
+      indexArray(
+        () =>
+          Array.from({
+            length: Math.floor(projectedAnchors.length / rangeSize) + 1,
+          }),
+        (_, index) => {
+          return createMemo(() => {
+            let min = Infinity
+            let max = -Infinity
+
+            for (
+              let i = index * rangeSize;
+              i < Math.min((index + 1) * rangeSize, projectedAnchors.length);
+              i++
+            ) {
+              max = Math.max(
+                max,
+                projectedAnchors[i].position.absolute.x,
+                projectedAnchors[i].post?.absolute.unclamped.x || -Infinity
+              )
+              min = Math.min(
+                min,
+                projectedAnchors[i].position.absolute.x,
+                projectedAnchors[i].pre?.absolute.unclamped.x || Infinity
+              )
+            }
+            return {
+              min,
+              max,
+            }
+          })
+        }
+      )
+    )
+
+    const isRangeVisible = createSelector(
+      () => [ranges(), sheet.pan(), dimensions()] as const,
+      (index: number, [ranges, pan, dimensions]) => {
+        const range = ranges[index]()
+        const viewportMin = pan * -1
+        const viewportMax = pan * -1 + (dimensions?.width || 0)
+        if (
+          (range.min > viewportMax && range.max > viewportMax) ||
+          (range.min < viewportMin && range.max < viewportMin)
+        ) {
+          return false
+        }
+        return true
+      }
+    )
+
+    function isAnchorVisible(index: number) {
+      return isRangeVisible(Math.floor(index / rangeSize))
+    }
+
     function project(point: Vector | number): Vector
     function project(point: Vector | number, axis: 'x' | 'y'): number
     function project(
@@ -255,6 +315,7 @@ export function createGraphComponent(api: Api) {
         setDimensions,
         offsetStyle,
         projectedAnchors,
+        isAnchorVisible,
       }
     )
 

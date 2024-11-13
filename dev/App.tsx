@@ -14,6 +14,18 @@ function Circle(props: { top: number; left: number }) {
   )
 }
 
+function createRandomAnchors(amount = 1000) {
+  return Array.from({ length: amount }, (_, index) =>
+    index !== 0 && index !== amount - 1
+      ? {
+          position: { x: index * 100, y: Math.random() * 500 },
+          pre: { x: 100, y: 0 },
+          post: { x: 100, y: 0 },
+        }
+      : { position: { x: index * 100, y: Math.random() * 500 } }
+  )
+}
+
 function App() {
   const [time] = createClock({
     get min() {
@@ -34,41 +46,9 @@ function App() {
     autostart: true,
   })
 
-  const TopTimeline = createTimeline([
-    { position: { x: 0, y: 0 } },
-    {
-      position: { x: 400, y: 300 },
-      pre: { x: 100, y: 0 },
-      post: { x: 100, y: 0 },
-    },
-    {
-      position: { x: 800, y: 0 },
-      pre: { x: 100, y: 0 },
-    },
-  ])
+  const TopTimeline = createTimeline(createRandomAnchors())
 
-  const LeftTimeline = createTimeline([
-    {
-      position: { x: 0, y: 0 },
-    },
-    {
-      position: { x: 300, y: 750 },
-    },
-    {
-      position: { x: 600, y: 0 },
-      pre: { x: 100, y: 0 },
-    },
-    {
-      position: { x: 900, y: 500 },
-      pre: { x: 100, y: 0 },
-      post: { x: 100, y: 0 },
-    },
-    { position: { x: 1200, y: 100 } },
-    {
-      position: { x: 1500, y: 750 },
-      pre: { x: 100, y: 0 },
-    },
-  ])
+  const LeftTimeline = createTimeline(createRandomAnchors())
 
   return (
     <div class={styles.app}>

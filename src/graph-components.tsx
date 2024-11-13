@@ -190,6 +190,7 @@ export function Control(props: ControlProps) {
             delta = divideVector(delta, graph.zoom())
 
             const absoluteControl = subtractVector(initialControl, delta)
+
             const control = absoluteToRelativeControl({
               position: graph.projectedAnchors[props.index].position.absolute,
               type: props.type,
@@ -290,16 +291,18 @@ export function Anchor(props: AnchorProps) {
   }
 
   return (
-    <g data-timeline-anchor>
-      <graph.Control type="pre" index={props.index} />
-      <graph.Control type="post" index={props.index} />
-      <graph.Handle
-        type="position"
-        position={graph.projectedAnchors[props.index].position.projected}
-        onDblClick={() => graph.deleteAnchor(props.index)}
-        onPointerDown={onPointerDown}
-      />
-    </g>
+    <Show when={graph.isAnchorVisible(props.index)}>
+      <g data-timeline-anchor>
+        <graph.Control type="pre" index={props.index} />
+        <graph.Control type="post" index={props.index} />
+        <graph.Handle
+          type="position"
+          position={graph.projectedAnchors[props.index].position.projected}
+          onDblClick={() => graph.deleteAnchor(props.index)}
+          onPointerDown={onPointerDown}
+        />
+      </g>
+    </Show>
   )
 }
 
