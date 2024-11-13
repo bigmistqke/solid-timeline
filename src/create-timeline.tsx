@@ -65,7 +65,7 @@ export function createTimeline(initial?: Array<Anchor>) {
     )
   )
 
-  const clampedAnchors = createArrayProxy(
+  const clampedAnchors = createMemo(
     mapArray(
       () => absoluteAnchors,
       (anchor, index): ClampedAnchor => {
@@ -86,19 +86,17 @@ export function createTimeline(initial?: Array<Anchor>) {
     )
   )
 
-  const mapArraySegments = mapArray(
-    () => clampedAnchors,
-    (anchor, index) =>
-      createMemo(() => {
-        const next = clampedAnchors[index() + 1]
-        const result = next
-          ? {
-              range: [anchor.position.x, next.position.x],
-              map: createLookupMap(anchor, next),
-            }
-          : undefined
-        return result
-      })
+  const mapArraySegments = mapArray(clampedAnchors, (anchor, index) =>
+    createMemo(() => {
+      const next = clampedAnchors()[index() + 1]
+      const result = next
+        ? {
+            range: [anchor.position.x, next.position.x],
+            map: createLookupMap(anchor, next),
+          }
+        : undefined
+      return result
+    })
   )
 
   const segments = createMemo(
@@ -170,7 +168,7 @@ export function createTimeline(initial?: Array<Anchor>) {
   }
 
   function d(config?: DConfig) {
-    return dFromClampedAnchors(clampedAnchors, config)
+    return dFromClampedAnchors(clampedAnchors(), config)
   }
 
   function query(time: number) {
@@ -268,7 +266,9 @@ export function createTimeline(initial?: Array<Anchor>) {
   const api: Api = {
     addAnchor,
     anchors,
-    clampedAnchors,
+    get clampedAnchors() {
+      return clampedAnchors()
+    },
     d,
     deleteAnchor,
     getPairedAnchorPosition,

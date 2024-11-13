@@ -16,7 +16,6 @@ import { graphComponentNames, GraphComponents } from './graph-components'
 import { DConfig } from './lib/d-from-clamped-anchors'
 import { useSheet } from './sheet'
 import { Merge, ProjectedAnchor, Vector } from './types'
-import { createArrayProxy } from './utils/create-array-proxy'
 import { getLastArrayItem } from './utils/get-last-array-item'
 import { whenMemo } from './utils/once-every-when'
 import { pickProps, processProps, removeProps } from './utils/props'
@@ -109,7 +108,7 @@ export function createGraphComponent(api: Api) {
       y: (overflow().top - config.min) * zoom().y + config.paddingY,
     }))
 
-    const projectedAnchors = createArrayProxy(
+    const projectedAnchors = createMemo(
       mapArray(
         () => api.clampedAnchors,
         (anchor): ProjectedAnchor => {
@@ -156,7 +155,7 @@ export function createGraphComponent(api: Api) {
       indexArray(
         () =>
           Array.from({
-            length: Math.floor(projectedAnchors.length / rangeSize) + 1,
+            length: Math.floor(projectedAnchors().length / rangeSize) + 1,
           }),
         (_, index) => {
           return createMemo(() => {
@@ -165,18 +164,18 @@ export function createGraphComponent(api: Api) {
 
             for (
               let i = index * rangeSize;
-              i < Math.min((index + 1) * rangeSize, projectedAnchors.length);
+              i < Math.min((index + 1) * rangeSize, projectedAnchors().length);
               i++
             ) {
               max = Math.max(
                 max,
-                projectedAnchors[i].position.absolute.x,
-                projectedAnchors[i].post?.absolute.unclamped.x || -Infinity
+                projectedAnchors()[i].position.absolute.x,
+                projectedAnchors()[i].post?.absolute.unclamped.x || -Infinity
               )
               min = Math.min(
                 min,
-                projectedAnchors[i].position.absolute.x,
-                projectedAnchors[i].pre?.absolute.unclamped.x || Infinity
+                projectedAnchors()[i].position.absolute.x,
+                projectedAnchors()[i].pre?.absolute.unclamped.x || Infinity
               )
             }
             return {
@@ -314,7 +313,9 @@ export function createGraphComponent(api: Api) {
         isOutOfBounds,
         setDimensions,
         offsetStyle,
-        projectedAnchors,
+        get projectedAnchors() {
+          return projectedAnchors()
+        },
         isAnchorVisible,
       }
     )
