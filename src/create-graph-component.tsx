@@ -195,8 +195,8 @@ export function createGraphComponent(api: Api) {
         const viewportMin = pan * -1
         const viewportMax = pan * -1 + (dimensions?.width || 0)
         if (
-          (range.min + 200 > viewportMax && range.max + 200 > viewportMax) ||
-          (range.min - 200 < viewportMin && range.max - 200 < viewportMin)
+          (range.min - 200 > viewportMax && range.max - 200 > viewportMax) ||
+          (range.min + 200 < viewportMin && range.max + 200 < viewportMin)
         ) {
           return false
         }
