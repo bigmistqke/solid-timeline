@@ -356,13 +356,22 @@ export function Indicator(props: Indicator) {
 export function Path() {
   const graph = useGraph()
   return (
-    <path
-      data-timeline-path
-      fill="none"
-      d={graph.d()}
-      style={{ 'pointer-events': 'none' }}
-    />
+    <Index
+      each={Array.from({ length: Math.floor(graph.anchors.length / 100) + 1 })}
+    >
+      {(_, index) => (
+        <Show when={graph.isRangeVisible(index)}>
+          <path
+            data-timeline-path
+            fill="none"
+            d={graph.d({ range: [index * 100, (index + 1) * 100] })}
+            style={{ 'pointer-events': 'none' }}
+          />
+        </Show>
+      )}
+    </Index>
   )
+  return
 }
 
 /**********************************************************************************/

@@ -3,10 +3,11 @@ import { ClampedAnchor, Vector } from 'solid-timeline/types'
 export interface DConfig {
   zoom?: Partial<Vector>
   offset?: Partial<Vector>
+  range?: [start: number, end: number]
 }
 
 export function dFromClampedAnchors(
-  absoluteAnchors: Array<ClampedAnchor>,
+  clampedAnchors: Array<ClampedAnchor>,
   config?: DConfig
 ) {
   let d = ''
@@ -25,13 +26,18 @@ export function dFromClampedAnchors(
 
   let currentCommand = ''
 
-  absoluteAnchors.forEach((anchor, index) => {
-    const { position, pre, post } = anchor
+  if (config?.range) {
+    clampedAnchors = clampedAnchors.slice(...config.range)
+  }
 
-    let next = absoluteAnchors[index + 1]
+  const lastIndex = config?.range ? config.range[1] : clampedAnchors.length - 1
+
+  clampedAnchors.forEach((anchor, index) => {
+    const { position, pre, post } = anchor
+    let next = clampedAnchors[index + 1]
 
     let segment = ''
-    if (pre) {
+    if (d !== '' && pre) {
       segment += pre.absolute.clamped.x * zoom.x + offset.x
       segment += ' '
       segment += pre.absolute.clamped.y * zoom.y + offset.y
@@ -47,7 +53,7 @@ export function dFromClampedAnchors(
     segment += position.y * zoom.y + offset.y
     segment += ' '
 
-    if (next) {
+    if (index !== lastIndex && next) {
       let command = !next.pre && !post ? 'L' : next.pre && post ? 'C' : 'Q'
 
       if (command !== currentCommand) {

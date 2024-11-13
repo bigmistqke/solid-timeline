@@ -42,6 +42,7 @@ interface GraphContext
   offsetStyle(axis?: 'x' | 'y'): { transform: string }
   projectedAnchors: Array<ProjectedAnchor>
   isAnchorVisible(index: number): boolean
+  isRangeVisible(index: number): boolean
 }
 
 const graphContext = createContext<GraphContext>()
@@ -281,7 +282,7 @@ export function createGraphComponent(api: Api) {
     }
 
     function d(config?: DConfig) {
-      return api.d(config ?? { zoom: zoom() })
+      return api.d({ zoom: zoom(), ...config })
     }
 
     function offsetStyle(axis?: 'x' | 'y') {
@@ -317,6 +318,7 @@ export function createGraphComponent(api: Api) {
           return projectedAnchors()
         },
         isAnchorVisible,
+        isRangeVisible,
       }
     )
 
