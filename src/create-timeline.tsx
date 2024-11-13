@@ -2,9 +2,8 @@ import { Accessor, createMemo, mapArray, mergeProps } from 'solid-js'
 import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import { createGraphComponent } from './create-graph-component'
 import { createValueComponent } from './create-value-component'
-import { createLookupMap } from './lib/create-lookup-map'
+import { binarySearchCurve } from './lib/binary-search-curve'
 import { DConfig, dFromClampedAnchors } from './lib/d-from-clamped-anchors'
-import { getValueFromSegments } from './lib/get-value-from-segments'
 import { addVector, multiplyVector } from './lib/vector'
 import type {
   AbsoluteAnchor,
@@ -104,24 +103,6 @@ export function createTimeline(initial?: Array<Anchor>) {
     })
   )
 
-  const mapArraySegments = mapArray(clampedAnchors, (anchor, index) => {
-    const nextAnchor = createMemo(() => clampedAnchors()[index() + 1])
-    return createMemo(() => {
-      const next = nextAnchor()
-      const result = next
-        ? {
-            range: [anchor.position.x, next.position.x],
-            map: createLookupMap(anchor, next),
-          }
-        : undefined
-      return result
-    })
-  })
-
-  const segments = createMemo(
-    () => mapArraySegments().slice(0, -1) as Array<Accessor<Segment>>
-  )
-
   function processControl(
     type: 'pre' | 'post',
     anchor: AbsoluteAnchor,
@@ -168,7 +149,25 @@ export function createTimeline(initial?: Array<Anchor>) {
   }
 
   function query(time: number) {
-    return getValueFromSegments(segments(), time)
+    const clamped = clampedAnchors()
+
+    let low = 0
+    let high = clamped.length - 2
+    let index = Math.floor((low + high) / 2)
+
+    while (low <= high) {
+      index = Math.floor((low + high) / 2)
+      const range = [clamped[index].position.x, clamped[index + 1].position.x]
+      if (time < range[0]) {
+        high = index - 1
+      } else if (time > range[1]) {
+        low = index + 1
+      } else {
+        break
+      }
+    }
+
+    return binarySearchCurve(clamped[index], clamped[index + 1], time)
   }
 
   function addAnchor(time: number, value = query(time)) {
@@ -268,7 +267,6 @@ export function createTimeline(initial?: Array<Anchor>) {
     d,
     deleteAnchor,
     query,
-    segments,
     setAnchors,
   }
 
