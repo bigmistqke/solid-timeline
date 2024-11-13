@@ -2,8 +2,8 @@ import { Accessor, createMemo, mapArray, mergeProps } from 'solid-js'
 import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import { createGraphComponent } from './create-graph-component'
 import { createValueComponent } from './create-value-component'
-import { binarySearchCurve } from './lib/binary-search-curve'
 import { DConfig, dFromClampedAnchors } from './lib/d-from-clamped-anchors'
+import { queryClampedAnchors } from './lib/query-clamped-anchors'
 import { addVector, multiplyVector } from './lib/vector'
 import type {
   AbsoluteAnchor,
@@ -167,7 +167,7 @@ export function createTimeline(initial?: Array<Anchor>) {
       }
     }
 
-    return binarySearchCurve(clamped[index], clamped[index + 1], time)
+    return queryClampedAnchors(clamped[index], clamped[index + 1], time)
   }
 
   function addAnchor(time: number, value = query(time)) {
